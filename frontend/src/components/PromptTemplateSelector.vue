@@ -1,0 +1,382 @@
+<template>
+  <div class="prompt-template-selector" :class="{ 'position-corner': position === 'corner' }">
+    <div class="template-btn-group">
+      <!-- Varsayılana dön düğmesi-->
+      <t-button
+        variant="text"
+        size="small"
+        class="template-default-btn"
+        :loading="resettingDefault"
+        @click="handleResetToDefault"
+      >
+        <t-icon name="rollback" />
+        <span>{{ $t('promptTemplate.resetDefault') }}</span>
+      </t-button>
+      <!-- Şablon seç düğmesi-->
+      <t-popup
+        v-if="showTemplatePicker"
+        trigger="click"
+        placement="top-right"
+        overlay-class-name="card-more-popup"
+        :visible="popupVisible"
+        @visible-change="handleVisibleChange"
+      >
+        <template #content>
+          <div class="template-popup">
+            <div class="template-header">
+              <span class="template-title">{{ $t('promptTemplate.selectTemplate') }}</span>
+            </div>
+            <div v-if="loading" class="template-loading">
+              <t-loading size="small" />
+            </div>
+            <div v-else-if="templates.length === 0" class="template-empty">
+              {{ $t('promptTemplate.noTemplates') }}
+            </div>
+            <div v-else class="template-list">
+              <div
+                v-for="template in templates"
+                :key="template.id"
+                class="template-item"
+                @click="selectTemplate(template)"
+              >
+                <div class="template-item-header">
+                  <span class="template-name">{{ template.name }}</span>
+                  <span v-if="template.default" class="template-tag default-tag">
+                    {{ $t('promptTemplate.default') }}
+                  </span>
+                  <span v-if="template.has_knowledge_base" class="template-tag kb-tag">
+                    <t-icon name="folder" size="12px" />
+                    {{ $t('promptTemplate.withKnowledgeBase') }}
+                  </span>
+                  <span v-if="template.has_web_search" class="template-tag web-tag">
+                    <t-icon name="internet" size="12px" />
+                    {{ $t('promptTemplate.withWebSearch') }}
+                  </span>
+                </div>
+                <p class="template-desc">{{ template.description }}</p>
+              </div>
+            </div>
+          </div>
+        </template>
+        <t-button
+          variant="outline"
+          size="small"
+          class="template-trigger-btn"
+          :loading="loading"
+        >
+          <t-icon name="view-module" />
+          <span>{{ $t('promptTemplate.useTemplate') }}</span>
+        </t-button>
+      </t-popup>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { PromptTemplate, PromptTemplatesConfig } from '@/api/system';
+import { useEditorResourcesStore } from '@/stores/editorResources';
+
+const { t } = useI18n();
+
+const props = withDefaults(defineProps<{
+  type: 'systemPrompt' | 'contextTemplate' | 'rewrite' | 'fallback' | 'agentSystemPrompt' | 'intentPrompt';
+  hasKnowledgeBase?: boolean;
+  position?: 'inline' | 'corner';  // inline: satır içinde göster, corner: giriş kutusunun sağ alt köşesi
+  /** Fallback senaryolarında kullanılır: sabit yanıtı model prompt'undan ayırır.*/
+  fallbackMode?: 'fixed' | 'model';
+  /** Intent senaryosu: Şu anda seçili intent kimliği (`template.id` ile eşleşir)*/
+  intentId?: string;
+  /** `false` olduğunda yalnızca “Varsayılana dön” gösterilir, “Şablonu kullan” gösterilmez.*/
+  showTemplatePicker?: boolean;
+}>(), {
+  showTemplatePicker: true,
+});
+
+const emit = defineEmits<{
+  (e: 'select', template: PromptTemplate): void;
+  (e: 'reset-default', template: PromptTemplate): void;
+}>();
+
+const popupVisible = ref(false);
+const loading = ref(false);
+const resettingDefault = ref(false);
+// Şablon yapılandırması `editorResources` paylaşılan anlık görüntüsünü kullanır: Akıllı ajan düzenleyicisi açıldığında önceden getirilmiştir, burada doğrudan yeniden kullanılır.
+const editorResources = useEditorResourcesStore();
+const templatesConfig = computed<PromptTemplatesConfig | null>(() => editorResources.promptTemplates);
+
+const handleVisibleChange = async (visible: boolean) => {
+  popupVisible.value = visible;
+  // İlk açılışta şablonları yükle
+  if (visible && !templatesConfig.value) {
+    await loadTemplates();
+  }
+};
+
+const loadTemplates = async () => {
+  if (loading.value) return;
+  loading.value = true;
+  try {
+    await editorResources.ensurePromptTemplates();
+  } catch (error) {
+    console.error('Failed to load prompt templates:', error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// Türe göre karşılık gelen şablon listesini al
+const templates = computed<PromptTemplate[]>(() => {
+  if (!templatesConfig.value) return [];
+  
+  let list: PromptTemplate[] = [];
+  switch (props.type) {
+    case 'systemPrompt':
+      list = templatesConfig.value.system_prompt || [];
+      break;
+    case 'contextTemplate':
+      list = templatesConfig.value.context_template || [];
+      break;
+    case 'rewrite':
+      list = templatesConfig.value.rewrite || [];
+      break;
+    case 'fallback':
+      list = templatesConfig.value.fallback || [];
+      // Filter by fallbackMode: "model" mode shows only mode:"model" templates, otherwise shows non-model templates
+      if (props.fallbackMode === 'model') {
+        list = list.filter(t => t.mode === 'model');
+      } else if (props.fallbackMode === 'fixed') {
+        list = list.filter(t => !t.mode || t.mode !== 'model');
+      }
+      break;
+    case 'agentSystemPrompt':
+      list = templatesConfig.value.agent_system_prompt || [];
+      break;
+    case 'intentPrompt':
+      list = templatesConfig.value.intent_prompts || [];
+      break;
+    default:
+      list = [];
+  }
+  return list;
+});
+
+const selectTemplate = (template: PromptTemplate) => {
+  emit('select', template);
+  popupVisible.value = false;
+};
+
+// Find the default template (marked with default: true, or the first one)
+const findDefaultTemplate = (list: PromptTemplate[]): PromptTemplate | null => {
+  if (!list || list.length === 0) return null;
+  const defaultItem = list.find(t => t.default);
+  return defaultItem || list[0];
+};
+
+const resolveResetTemplate = (): PromptTemplate | null => {
+  const list = templates.value;
+  if (props.type === 'intentPrompt') {
+    if (!props.intentId) return null;
+    return list.find((t) => t.id === props.intentId) ?? null;
+  }
+  return findDefaultTemplate(list);
+};
+
+// Reset to default template content
+const handleResetToDefault = async () => {
+  if (!templatesConfig.value) {
+    resettingDefault.value = true;
+    try {
+      await editorResources.ensurePromptTemplates();
+    } catch (error) {
+      console.error('Failed to load prompt templates:', error);
+      return;
+    } finally {
+      resettingDefault.value = false;
+    }
+  }
+
+  const defaultTpl = resolveResetTemplate();
+  if (defaultTpl) {
+    emit('reset-default', defaultTpl);
+  }
+};
+
+// Şablonları önceden yükle (isteğe bağlı)
+onMounted(() => {
+  // Burada önceden yüklenebilir veya kullanıcının tıklaması beklenerek daha sonra yüklenebilir.
+  // loadTemplates();
+});
+</script>
+
+<style scoped lang="less">
+.prompt-template-selector {
+  display: inline-flex;
+  
+  &.position-corner {
+    align-self: flex-end;
+  }
+}
+
+.template-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.template-default-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--td-text-color-placeholder);
+  font-size: var(--app-text-sm);
+  height: 26px;
+  padding: 0 6px;
+
+  &:hover {
+    color: var(--td-brand-color);
+  }
+  
+  :deep(.t-button__text) {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  
+  :deep(.t-icon) {
+    font-size: var(--app-text-base);
+    vertical-align: middle;
+    line-height: 1;
+  }
+}
+
+.template-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--td-text-color-secondary);
+  border-color: var(--td-component-stroke);
+  font-size: var(--app-text-sm);
+  height: 26px;
+  padding: 0 8px;
+  background: var(--td-bg-color-container);
+
+  &:hover {
+    color: var(--td-brand-color);
+    border-color: var(--td-brand-color);
+    background: var(--td-bg-color-secondarycontainer);
+  }
+  
+  :deep(.t-button__text) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  :deep(.t-icon) {
+    vertical-align: middle;
+    line-height: 1;
+  }
+}
+
+.template-popup {
+  width: 420px;
+  max-height: 400px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.template-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--td-component-stroke);
+  flex-shrink: 0;
+}
+
+.template-title {
+  font-size: var(--app-text-base);
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+
+.template-loading,
+.template-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--td-text-color-placeholder);
+  font-size: var(--app-text-md);
+}
+
+.template-list {
+  overflow-y: auto;
+  padding: 8px;
+  flex: 1;
+}
+
+.template-item {
+  padding: 12px;
+  border-radius: var(--app-radius-md);
+  cursor: pointer;
+  transition: all var(--app-motion-base) ease;
+  margin-bottom: 4px;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+  
+  &:hover {
+    background: var(--td-bg-color-secondarycontainer);
+  }
+}
+
+.template-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.template-name {
+  font-size: var(--app-text-base);
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+
+.template-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: var(--app-radius-xs);
+  font-size: var(--app-text-xs);
+  
+  &.kb-tag {
+    background: var(--td-brand-color-light);
+    color: var(--td-brand-color);
+  }
+  
+  &.web-tag {
+    background: var(--td-success-color-light);
+    color: var(--td-brand-color);
+  }
+
+  &.default-tag {
+    background: var(--td-warning-color-light);
+    color: var(--td-warning-color);
+    font-weight: 500;
+  }
+}
+
+.template-desc {
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-secondary);
+  margin: 0;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+</style>

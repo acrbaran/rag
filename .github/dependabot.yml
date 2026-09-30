@@ -1,0 +1,97 @@
+# Dependabot configuration for the Rethra repository.
+#
+# Policy: security-only dependency updates.
+#
+# Security-only pattern (mirrors fluent/fluentd-kubernetes-daemonset and
+# the dependabot docs for "Disabling Dependabot version updates"):
+#
+#     open-pull-requests-limit: 0   # primary kill-switch for version PRs
+#     ignore:                        # belt-and-suspenders: drop every
+#       - dependency-name: "*"       # non-security update at the source.
+#         update-types: ["version-update"]
+#     groups:                        # collapse simultaneous CVE PRs into
+#       security-updates:            # ONE PR per ecosystem so a noisy
+#         applies-to: security-updates
+#         patterns: ["*"]
+#
+# Why both `open-pull-requests-limit: 0` AND `ignore`:
+#   The official docs treat `limit: 0` as the canonical way to disable
+#   version updates, but dependabot-core#7353 shows it has historically
+#   been ignored for some ecosystems. Adding the wildcard `ignore` rule
+#   guarantees zero scheduled version PRs even if the limit gets
+#   regressed upstream. Security updates are unaffected by either knob.
+#
+# Prerequisite: "Dependabot security updates" must be enabled in
+#   Settings → Code security and analysis. Without it, no CVE PRs are
+#   opened regardless of this file.
+#
+version: 2
+updates:
+  # ─── Go modules ───
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+    groups:
+      server-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: "/client"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+    groups:
+      client-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # ─── npm ───
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+    groups:
+      frontend-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # ─── Python ───
+  - package-ecosystem: pip
+    directory: "/docreader"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+    groups:
+      docreader-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # ─── GitHub Actions ───
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+    groups:
+      gha-security:
+        applies-to: security-updates
+        patterns: ["*"]

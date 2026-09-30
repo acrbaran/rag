@@ -1,0 +1,124 @@
+// Ayarlar bolumundeki (views/settings, views/system, views/integrations) tum sayfalarda ortak kullanilan duzen mixin'i:
+// Sayfa baslik blogu, ayar satiri, satir ici aciklama / kontrol sutunu, satir ici kaydetme durumu.
+// Sayfa kendi class adlarini korur; yalnizca yinelenen bildirimleri mixin cagrilariyla degistirin, farklilasmasi gerektiginde cagri sonrasinda override edin.
+//
+//   @import (reference) '@/components/css/settings-section.less';
+//   .section-header { .settings-section-header(); }
+//   .setting-row { .setting-row(); }
+//   .setting-info { .setting-info(); }
+//   .setting-control { .setting-control(); }
+
+.settings-section-header() {
+  // Rethra tab header: flex-col gap-1, followed by gap-6 to the first section.
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 24px;
+  padding-right: 24px;
+
+  h2 {
+    margin: 0;
+    color: var(--td-text-color-primary);
+    font-family: var(--app-font-heading);
+    font-size: var(--app-text-2xl);
+    font-weight: 500;
+    line-height: 26px;
+    letter-spacing: 0;
+  }
+
+  .section-description {
+    margin: 0;
+    color: var(--td-text-color-secondary);
+    font-size: var(--app-text-xs);
+    line-height: 15px;
+  }
+
+  // Baslik solda, islem dugmeleri sagda
+  &__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+  }
+}
+
+// Rethra SettingsSection title block (text-base heading + text-xs muted description).
+.settings-block-title() {
+  margin: 0 0 4px;
+  color: var(--td-text-color-primary);
+  font-family: var(--app-font-heading);
+  font-size: var(--app-text-lg);
+  font-weight: 500;
+  line-height: 22.5px;
+}
+
+.setting-row() {
+  // Rethra SettingsRow: flex flex-wrap justify-end gap-x-6 gap-y-2 py-3 items-center, no dividers.
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  column-gap: 24px;
+  row-gap: 8px;
+  padding: 12px 0;
+  border-bottom: none;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.setting-info() {
+  flex: 1 1 0;
+  min-width: 11rem;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+
+  label,
+  .setting-label {
+    display: block;
+    margin: 0;
+    max-width: 512px;
+    color: var(--td-text-color-primary);
+    font-family: var(--app-font-family);
+    font-size: var(--app-text-base);
+    font-weight: 500;
+    line-height: 18.75px;
+  }
+
+  .desc,
+  .setting-desc {
+    margin: 0;
+    max-width: 512px;
+    color: var(--td-text-color-secondary);
+    font-size: var(--app-text-xs);
+    line-height: 1.375;
+  }
+}
+
+.setting-control() {
+  flex-shrink: 0;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+// Degistirilir degistirilmez kaydedilen ayar ogeleri icin satir ici geri bildirim (toast yerine)
+.setting-save-state() {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  min-width: 52px;
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-secondary);
+
+  &--success {
+    color: var(--td-success-color);
+  }
+}

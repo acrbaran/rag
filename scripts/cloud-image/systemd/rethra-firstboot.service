@@ -1,0 +1,17 @@
+[Unit]
+Description=Rethra first-boot initialization (runs once)
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+Before=rethra.service
+ConditionPathExists=/usr/local/sbin/rethra-firstboot.sh
+ConditionPathExists=!/opt/Rethra/.firstboot.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/rethra-firstboot.sh
+RemainAfterExit=no
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

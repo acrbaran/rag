@@ -1,0 +1,58 @@
+# Tüm gizli dosya ve dizinleri yoksay
+.*
+# Ancak belirli gizli dosya ve dizinleri yok saymayın
+!.env.example
+!.gitignore
+!.github/
+
+# Hassas dosyalar
+*.pem
+*_key
+*_secret
+*.key
+*.crt
+
+# IDE ve düzenleyici dosyaları
+*.swp
+*.swo
+
+# Derleme ve bağımlılık dosyaları
+node_modules/
+/dist/
+/build/
+*.log
+
+# Geçici dosyalar
+tmp/
+temp/
+logs/
+*.pid
+
+Rethra
+Rethra-lite
+/models/
+test/data/mswag.txt
+data/files/
+data/rethra.db
+data/rethra.db-wal
+data/rethra.db-shm
+skills-lock.json
+
+web/
+
+**/__pycache__
+/scripts/scale_dev_jobs.sh
+/server
+frontend/.vite
+packages/protoc-3.19.4-linux-x86_64.zip
+
+Claude.md
+
+# Yerel test betikleri
+fix-docker.sh
+
+# Staging dir for the Docker sandbox self-check probe (removed after each run)
+.rethra-sandbox-check-*
+
+# Locally built BrowserSkill runtime and extension bundles
+/artifacts/browserskill/

@@ -1,0 +1,604 @@
+package types
+
+// Worker-pool names are part of the runtime observability API. Each pool is
+// backed by an independent asynq.Server, so concurrency is hard-isolated
+// between pools instead of being only a weighted dequeue preference.
+const (
+	WorkerPoolCore        = "core"
+	WorkerPoolPostProcess = "postprocess"
+	WorkerPoolEnrichment  = "enrichment"
+	WorkerPoolMaintenance = "maintenance"
+	WorkerPoolShared      = "shared"
+	WorkerPoolWiki        = "wiki"
+
+	// Upstream defaults are explicit guarantees plus an elastic pool. The
+	// shared pool may consume core and enrichment queues, so idle capacity in
+	// either stage can be borrowed without sacrificing the dedicated minimums.
+	DefaultCoreWorkerConcurrency        = 8
+	DefaultPostProcessWorkerConcurrency = 2
+	DefaultEnrichmentWorkerConcurrency  = 12
+	DefaultMaintenanceWorkerConcurrency = 4
+	DefaultSharedWorkerConcurrency      = 6
+	DefaultWikiWorkerConcurrency        = 8
+	DefaultUpstreamWorkerConcurrency    = DefaultCoreWorkerConcurrency +
+		DefaultPostProcessWorkerConcurrency + DefaultEnrichmentWorkerConcurrency +
+		DefaultMaintenanceWorkerConcurrency + DefaultSharedWorkerConcurrency
+)
+
+// Asynq queue names. QueueMaintenance intentionally keeps the physical Redis
+// name "low" so tasks enqueued by older releases remain consumable during a
+// rolling deployment. New code uses the business-semantic constant.
+const (
+	QueueDefault = "default"
+	// QueueChatAttachment carries session-scoped chat attachment parsing. It
+	// lives in the core pool but with a higher weight than QueueDefault so
+	// interactive chat uploads are not starved by knowledge-base batch imports.
+	QueueChatAttachment = "chat_attachment"
+	QueuePostProcess    = "postprocess"
+	QueueSummary        = "summary"
+	QueueMultimodal     = "multimodal"
+	QueueGraph          = "graph"
+	QueueQuestion       = "question"
+	QueueSync           = "sync"
+	QueueMaintenance    = "low"
+	QueueWiki           = "wiki"
+	// QueueMemory carries debounced long-term memory distillation. It sits in
+	// the enrichment pool because it is a background LLM call whose latency
+	// nobody is waiting on.
+	QueueMemory = "memory"
+)
+
+// QueueDefinition is the single source of truth for queue topology. Worker
+// servers and runtime inspection both consume this registry, preventing the
+// scheduling weights shown to operators from drifting from the actual server
+// configuration.
+type QueueDefinition struct {
+	Name         string
+	Pool         string
+	Weight       int
+	SharedWeight int
+	TaskTypes    []string
+}
+
+var queueDefinitions = []QueueDefinition{
+	{Name: QueueDefault, Pool: WorkerPoolCore, Weight: 1, SharedWeight: 3, TaskTypes: []string{
+		TypeDocumentProcess, TypeManualProcess,
+	}},
+	// Interactive chat attachment parsing: higher core weight than the default
+	// queue so a large KB import cannot make chat uploads queue behind it.
+	{Name: QueueChatAttachment, Pool: WorkerPoolCore, Weight: 3, SharedWeight: 3, TaskTypes: []string{
+		TypeTemporaryDocumentProcess,
+	}},
+	{Name: QueuePostProcess, Pool: WorkerPoolPostProcess, Weight: 1, TaskTypes: []string{
+		TypeKnowledgePostProcess,
+	}},
+	{Name: QueueSummary, Pool: WorkerPoolEnrichment, Weight: 2, SharedWeight: 2, TaskTypes: []string{
+		TypeSummaryGeneration, TypeDataTableSummary, TypeKnowledgeAutoTag, TypeKnowledgeBaseProfile,
+	}},
+	{Name: QueueMultimodal, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeImageMultimodal}},
+	{Name: QueueGraph, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeChunkExtract}},
+	{Name: QueueQuestion, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeQuestionGeneration}},
+	{Name: QueueMemory, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeMemoryExtract}},
+	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
+	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
+		TypeFAQImport, TypeKBClone, TypeIndexDelete, TypeKBDelete,
+		TypeKnowledgeListDelete, TypeKnowledgeListReparse, TypeKnowledgeMove,
+	}},
+	{Name: QueueWiki, Pool: WorkerPoolWiki, Weight: 1, TaskTypes: []string{TypeWikiIngest, TypeWikiFinalize}},
+}
+
+// QueueDefinitions returns a copy so callers cannot mutate global topology.
+func QueueDefinitions() []QueueDefinition {
+	definitions := make([]QueueDefinition, len(queueDefinitions))
+	for i, definition := range queueDefinitions {
+		definitions[i] = definition
+		definitions[i].TaskTypes = append([]string(nil), definition.TaskTypes...)
+	}
+	return definitions
+}
+
+// QueueForTaskType returns the declared queue for a task type. Producers still
+// pass the queue explicitly to asynq, while tests and observability can use
+// this mapping to detect drift.
+func QueueForTaskType(taskType string) (string, bool) {
+	for _, definition := range queueDefinitions {
+		for _, declaredType := range definition.TaskTypes {
+			if declaredType == taskType {
+				return definition.Name, true
+			}
+		}
+	}
+	return "", false
+}
+
+// QueueWeightsForPool returns the asynq queue configuration for one worker
+// pool. An empty map indicates a programming error in the pool declaration.
+func QueueWeightsForPool(pool string) map[string]int {
+	weights := make(map[string]int)
+	for _, definition := range queueDefinitions {
+		if definition.Pool == pool {
+			weights[definition.Name] = definition.Weight
+		}
+	}
+	return weights
+}
+
+// QueueWeightsForSharedPool returns the core/enrichment queues eligible for
+// elastic capacity. Post-process and maintenance are deliberately excluded:
+// post-process needs a small latency guarantee, while long maintenance tasks
+// must not pin burst capacity intended for the user-facing pipeline.
+func QueueWeightsForSharedPool() map[string]int {
+	weights := make(map[string]int)
+	for _, definition := range queueDefinitions {
+		if definition.SharedWeight > 0 {
+			weights[definition.Name] = definition.SharedWeight
+		}
+	}
+	return weights
+}
+
+// WorkerPoolConcurrency contains the explicit per-instance pool capacities.
+// Unlike the old ratio allocator, each field is independently configurable.
+type WorkerPoolConcurrency struct {
+	Core        int
+	PostProcess int
+	Enrichment  int
+	Maintenance int
+	Shared      int
+	Wiki        int
+}
+
+func DefaultWorkerPoolConcurrency() WorkerPoolConcurrency {
+	return WorkerPoolConcurrency{
+		Core:        DefaultCoreWorkerConcurrency,
+		PostProcess: DefaultPostProcessWorkerConcurrency,
+		Enrichment:  DefaultEnrichmentWorkerConcurrency,
+		Maintenance: DefaultMaintenanceWorkerConcurrency,
+		Shared:      DefaultSharedWorkerConcurrency,
+		Wiki:        DefaultWikiWorkerConcurrency,
+	}
+}
+
+// ResolveWorkerPoolConcurrency centralizes setting keys, environment names,
+// defaults, and invalid-value fallback for both server construction and the
+// runtime API. The callback lets this package stay independent of the system
+// setting service interface.
+func ResolveWorkerPoolConcurrency(read func(key, env string, fallback int) int) WorkerPoolConcurrency {
+	allocation := DefaultWorkerPoolConcurrency()
+	if read == nil {
+		return allocation
+	}
+	positive := func(key, env string, fallback int) int {
+		value := read(key, env, fallback)
+		if value < 1 {
+			return fallback
+		}
+		return value
+	}
+	allocation.Core = positive("asynq.core_concurrency", "RETHRA_ASYNQ_CORE_CONCURRENCY", allocation.Core)
+	allocation.PostProcess = positive("asynq.postprocess_concurrency", "RETHRA_ASYNQ_POSTPROCESS_CONCURRENCY", allocation.PostProcess)
+	allocation.Enrichment = positive("asynq.enrichment_concurrency", "RETHRA_ASYNQ_ENRICHMENT_CONCURRENCY", allocation.Enrichment)
+	allocation.Maintenance = positive("asynq.maintenance_concurrency", "RETHRA_ASYNQ_MAINTENANCE_CONCURRENCY", allocation.Maintenance)
+	allocation.Shared = positive("asynq.shared_concurrency", "RETHRA_ASYNQ_SHARED_CONCURRENCY", allocation.Shared)
+	allocation.Wiki = positive("asynq.wiki_concurrency", "RETHRA_WIKI_ASYNQ_CONCURRENCY", allocation.Wiki)
+	return allocation
+}
+
+func (c WorkerPoolConcurrency) UpstreamTotal() int {
+	return c.Core + c.PostProcess + c.Enrichment + c.Maintenance + c.Shared
+}
+
+// QueueStat is a read-only depth snapshot of a single asynq queue, used
+// by the System Admin runtime dashboard. Field names mirror the counts
+// exposed by asynq.QueueInfo. Pool / Weight are static metadata (which
+// worker pool drains the queue and its scheduling weight within that
+// pool) so the UI can group and explain the lanes without the frontend
+// hard-coding the topology.
+type QueueStat struct {
+	Name string `json:"name"`
+	// Pool is the independent worker pool that drains this queue.
+	Pool string `json:"pool"`
+	// Weight is the queue's scheduling weight inside its pool.
+	Weight int `json:"weight"`
+	// Size is the total number of tasks in the queue (pending + active +
+	// scheduled + retry + aggregating + archived).
+	Size      int `json:"size"`
+	Pending   int `json:"pending"`
+	Active    int `json:"active"`
+	Scheduled int `json:"scheduled"`
+	Retry     int `json:"retry"`
+	Archived  int `json:"archived"`
+	Completed int `json:"completed"`
+	// Processed / Failed are today's counters (reset daily).
+	Processed int `json:"processed"`
+	Failed    int `json:"failed"`
+	// Paused reports whether the queue is paused (tasks not consumed).
+	Paused bool `json:"paused"`
+	// LatencyMs is the age of the oldest pending task, in milliseconds.
+	LatencyMs int64 `json:"latency_ms"`
+	// MemoryUsageBytes is the approximate Redis memory the queue occupies.
+	MemoryUsageBytes int64 `json:"memory_usage_bytes"`
+}
+
+// WorkerServerStat is one live asynq server heartbeat. Queue weights identify
+// which logical pool the server belongs to; the runtime handler aggregates
+// these records across replicas so configured per-instance capacity is not
+// confused with actual cluster capacity.
+type WorkerServerStat struct {
+	Concurrency int
+	Active      int
+	Status      string
+	Queues      map[string]int
+}
+
+const (
+	TypeChunkExtract             = "chunk:extract"
+	TypeDocumentProcess          = "document:process"           // Belge işleme görevi
+	TypeFAQImport                = "faq:import"                 // SSS içe aktarma görevi (dry run modu dahil)
+	TypeQuestionGeneration       = "question:generation"        // Soru oluşturma görevi
+	TypeSummaryGeneration        = "summary:generation"         // Özet oluşturma görevi
+	TypeKBClone                  = "kb:clone"                   // Bilgi tabanı kopyalama görevi
+	TypeIndexDelete              = "index:delete"               // Dizin silme görevi
+	TypeKBDelete                 = "kb:delete"                  // Bilgi tabanı silme görevi
+	TypeKnowledgeListDelete      = "knowledge:list_delete"      // Toplu bilgi silme görevi
+	TypeKnowledgeListReparse     = "knowledge:list_reparse"     // Toplu bilgi yeniden ayrıştırma görevi
+	TypeKnowledgeMove            = "knowledge:move"             // Bilgi taşıma görevi
+	TypeDataTableSummary         = "datatable:summary"          // Tablo özeti görevi
+	TypeImageMultimodal          = "image:multimodal"           // Görüntü çok modlu işleme görevi (OCR + VLM Caption)
+	TypeKnowledgePostProcess     = "knowledge:post_process"     // Bilgi son işleme görevi (birleşik zamanlama)
+	TypeKnowledgeAutoTag         = "knowledge:auto_tag"         // Belgeyi, bilgi tabanındaki mevcut etiketlerle otomatik ilişkilendir
+	TypeKnowledgeBaseProfile     = "kb:profile"                 // Bilgi tabanı açıklaması (profili) oluşturma görevi
+	TypeManualProcess            = "manual:process"             // Manuel bilgi güncelleme görevi (cleanup + yeniden dizinleme)
+	TypeDataSourceSync           = "datasource:sync"            // Veri kaynağı senkronizasyon görevi
+	TypeWikiIngest               = "wiki:ingest"                // Wiki sayfası eşitleme görevi
+	TypeWikiFinalize             = "wiki:finalize"              // Wiki KB düzeyi tamamlama görevi (debounce: dizin yeniden oluşturma/bozuk bağlantı temizliği/çapraz bağlantılar)
+	TypeTemporaryDocumentProcess = "temporary_document:process" // Oturum geçici belgesi ayrıştırma görevi
+	// TypeMemoryExtract uzun süreli bellek çıkarma görevi (oturum turu debounce işleminden sonra eşzamansız yürütülür)
+	TypeMemoryExtract = "memory:extract"
+)
+
+// MemoryExtractPayload carries everything the background distillation task
+// needs. Scope (tenant + subject) travels in the payload rather than being
+// read from the worker context: asynq and the Lite executor both start from a
+// bare context, so anything the request knew and the payload does not carry is
+// simply gone by the time the handler runs.
+type MemoryExtractPayload struct {
+	TracingContext
+	TenantID  uint64 `json:"tenant_id"`
+	SubjectID string `json:"subject_id"`
+	SessionID string `json:"session_id"`
+	// MessageID is the assistant message that closed the triggering turn. It
+	// bounds the extraction window and is stored as the source of any item
+	// produced, so every memory can be traced back to a real message.
+	MessageID string `json:"message_id"`
+	// ChatModelID is the model the conversation itself used. The extraction
+	// task falls back to it when MemoryConfig.ExtractModelID is blank, which
+	// is what the settings UI promises.
+	ChatModelID string `json:"chat_model_id,omitempty"`
+	Language    string `json:"language,omitempty"`
+}
+
+// ExtractChunkPayload represents the extract chunk task payload
+type ExtractChunkPayload struct {
+	TracingContext
+	TenantID uint64 `json:"tenant_id"`
+	ChunkID  string `json:"chunk_id"`
+	ModelID  string `json:"model_id"`
+	// KnowledgeID + Attempt link the per-chunk extract back to the parent
+	// parse attempt's postprocess stage so the worker can record a
+	// postprocess.graph.chunk[i] subspan. 0 / "" means "skip span
+	// recording" for legacy in-flight tasks.
+	KnowledgeID string `json:"knowledge_id,omitempty"`
+	Attempt     int    `json:"attempt,omitempty"`
+	// ChunkIndex is the 0-based ordinal of this chunk inside the parent
+	// knowledge's text-chunk set, used as the subspan name suffix
+	// ("postprocess.graph.chunk[3]") so the timeline preserves order.
+	ChunkIndex int `json:"chunk_index,omitempty"`
+}
+
+// DocumentProcessPayload represents the document process task payload
+type DocumentProcessPayload struct {
+	TracingContext
+	RequestId                string   `json:"request_id"`
+	TenantID                 uint64   `json:"tenant_id"`
+	KnowledgeID              string   `json:"knowledge_id"`
+	KnowledgeBaseID          string   `json:"knowledge_base_id"`
+	FilePath                 string   `json:"file_path,omitempty"` // Dosya yolu (dosya içe aktarılırken kullanılır)
+	FileName                 string   `json:"file_name,omitempty"` // Dosya adı (dosya içe aktarılırken kullanılır)
+	FileType                 string   `json:"file_type,omitempty"` // Dosya türü (dosya içe aktarılırken kullanılır)
+	URL                      string   `json:"url,omitempty"`       // URL (URL içe aktarılırken kullanılır)
+	FileURL                  string   `json:"file_url,omitempty"`  // Dosya kaynak bağlantısı (file_url içe aktarılırken kullanılır)
+	Passages                 []string `json:"passages,omitempty"`  // Metin paragrafı (metin içe aktarılırken kullanılır)
+	EnableMultimodel         bool     `json:"enable_multimodel"`
+	EnableQuestionGeneration bool     `json:"enable_question_generation"` // Soru oluşturmanın etkin olup olmadığı
+	QuestionCount            int      `json:"question_count,omitempty"`   // Her chunk için oluşturulacak soru sayısı
+	Language                 string   `json:"language,omitempty"`         // Request locale for {{language}} in prompt templates
+	// Attempt is the per-knowledge attempt number this task belongs to.
+	// Set on enqueue (initial parse → attempt 1; reparse → max+1) so
+	// every span recorded by this task lands on the right attempt
+	// branch. Asynq retries within an attempt keep the same value so
+	// retried spans overwrite the previous attempt's row rather than
+	// fan out into a new attempt for every retry.
+	Attempt int `json:"attempt,omitempty"`
+}
+
+// FAQImportPayload represents the FAQ import task payload (including dry run mode)
+type FAQImportPayload struct {
+	TracingContext
+	Language    string            `json:"language,omitempty"`
+	TenantID    uint64            `json:"tenant_id"`
+	TaskID      string            `json:"task_id"`
+	KBID        string            `json:"kb_id"`
+	KnowledgeID string            `json:"knowledge_id,omitempty"` // Yalnızca dry run olmayan modda gerekir
+	Entries     []FAQEntryPayload `json:"entries,omitempty"`      // Az miktarda veri olduğunda doğrudan payload içinde depolanır
+	EntriesURL  string            `json:"entries_url,omitempty"`  // Büyük miktarda veri olduğunda nesne depolamada saklanır, burada URL depolanır
+	EntryCount  int               `json:"entry_count,omitempty"`  // Toplam kayıt sayısı (EntriesURL kullanılırken gerekir)
+	Mode        string            `json:"mode"`
+	DryRun      bool              `json:"dry_run"`     // dry run modu yalnızca doğrular, içe aktarma yapmaz
+	EnqueuedAt  int64             `json:"enqueued_at"` // Görevin kuyruğa eklenme zaman damgası, aynı TaskID için farklı gönderimleri ayırt etmek amacıyla kullanılır
+	InstanceID  string            `json:"instance_id,omitempty"`
+	Initiator   TaskInitiator     `json:"initiator,omitempty"`
+}
+
+// QuestionGenerationPayload represents the question generation task payload
+type QuestionGenerationPayload struct {
+	TracingContext
+	TenantID        uint64 `json:"tenant_id"`
+	KnowledgeBaseID string `json:"knowledge_base_id"`
+	KnowledgeID     string `json:"knowledge_id"`
+	QuestionCount   int    `json:"question_count"`
+	// Language is the request locale (e.g. zh-CN, en-US) when the task was enqueued, used for {{language}} / {{lang}} in templates.
+	Language string `json:"language,omitempty"`
+	// Attempt links this task to the parent parse attempt so the worker
+	// can record a postprocess.question subspan under the right attempt's
+	// postprocess stage. 0 means "skip span recording" (legacy in-flight
+	// tasks queued before this field shipped, or callers without a
+	// tracker).
+	Attempt int `json:"attempt,omitempty"`
+	// ChunkIDs switches the handler into batched fan-out mode: the task
+	// generates questions for this ordered window of text chunks only.
+	// Batching (rather than one task per chunk) keeps the task count
+	// bounded for very large documents, while still giving each batch
+	// independent retry / cancellation / tracing and letting the worker
+	// do a single embedding BatchIndex per batch. Empty means the legacy
+	// whole-knowledge mode (kept for in-flight tasks queued before fan-out
+	// shipped), where the handler iterates all text chunks itself.
+	// Following the ExtractChunkPayload precedent, we carry only chunk ids
+	// (not their content) so the payload stays small and the worker reads
+	// fresh content at run time.
+	ChunkIDs []string `json:"chunk_ids,omitempty"`
+	// ChunkID is the single-chunk variant of ChunkIDs, retained only so
+	// tasks enqueued by an interim per-chunk build still run (treated as a
+	// one-element batch). New enqueues use ChunkIDs.
+	ChunkID string `json:"chunk_id,omitempty"`
+	// BatchIndex is the 0-based ordinal of this batch inside the parent
+	// knowledge's text-chunk set, used as the subspan name suffix
+	// ("postprocess.question.batch[3]") so the timeline preserves order.
+	BatchIndex int `json:"batch_index,omitempty"`
+	// PrevChunkID / NextChunkID are the text chunks (by StartAt) just
+	// outside this batch window, computed at enqueue time so the worker can
+	// rebuild the same surrounding context the legacy whole-knowledge loop
+	// used at the batch boundaries, without re-listing every chunk of the
+	// knowledge. Empty when the batch is at a document boundary.
+	PrevChunkID string `json:"prev_chunk_id,omitempty"`
+	NextChunkID string `json:"next_chunk_id,omitempty"`
+}
+
+// SummaryGenerationPayload represents the summary generation task payload
+type SummaryGenerationPayload struct {
+	TracingContext
+	TenantID        uint64 `json:"tenant_id"`
+	KnowledgeBaseID string `json:"knowledge_base_id"`
+	KnowledgeID     string `json:"knowledge_id"`
+	Language        string `json:"language,omitempty"`
+	// Refresh marks an independently queued refresh after document metadata or
+	// chunk edits. Refresh tasks are not part of the parse attempt's pending
+	// subtask counter and update existing summary chunks in place.
+	Refresh bool `json:"refresh,omitempty"`
+	// Attempt links this task to the parent parse attempt so the worker
+	// can record a postprocess.summary subspan under the right attempt's
+	// postprocess stage. See QuestionGenerationPayload.Attempt notes.
+	Attempt int `json:"attempt,omitempty"`
+}
+
+// KBClonePayload represents the knowledge base clone task payload
+type KBClonePayload struct {
+	TracingContext
+	TenantID  uint64        `json:"tenant_id"`
+	TaskID    string        `json:"task_id"`
+	SourceID  string        `json:"source_id"`
+	TargetID  string        `json:"target_id"`
+	Initiator TaskInitiator `json:"initiator,omitempty"`
+	// New clone destinations are reserved by the server at admission and
+	// created by the worker once. Retries retain both ID and creator.
+	CreateTarget bool   `json:"create_target,omitempty"`
+	CreatorID    string `json:"creator_id,omitempty"`
+}
+
+// IndexDeletePayload represents the index delete task payload
+type IndexDeletePayload struct {
+	TracingContext
+	TenantID         uint64                  `json:"tenant_id"`
+	KnowledgeBaseID  string                  `json:"knowledge_base_id"`
+	EmbeddingModelID string                  `json:"embedding_model_id"`
+	KBType           string                  `json:"kb_type"`
+	ChunkIDs         []string                `json:"chunk_ids"`
+	EffectiveEngines []RetrieverEngineParams `json:"effective_engines"`
+	// VectorStoreID is the bound store snapshot taken at enqueue time so the
+	// async worker can resolve the same store the KB was bound to.
+	// nil means the KB had no binding — falls back to EffectiveEngines.
+	VectorStoreID *string `json:"vector_store_id,omitempty"`
+}
+
+// KBDeletePayload represents the knowledge base delete task payload
+type KBDeletePayload struct {
+	TracingContext
+	TenantID         uint64                  `json:"tenant_id"`
+	KnowledgeBaseID  string                  `json:"knowledge_base_id"`
+	DataSourceIDs    []string                `json:"data_source_ids,omitempty"`
+	EffectiveEngines []RetrieverEngineParams `json:"effective_engines"`
+	// VectorStoreID is the bound store snapshot taken at enqueue time (before
+	// soft-delete) so the async worker can resolve the right store. nil means
+	// the KB had no binding — falls back to EffectiveEngines.
+	VectorStoreID *string `json:"vector_store_id,omitempty"`
+}
+
+// KnowledgeListDeletePayload represents the batch knowledge delete task payload
+type KnowledgeListDeletePayload struct {
+	TracingContext
+	TenantID        uint64        `json:"tenant_id"`
+	KnowledgeIDs    []string      `json:"knowledge_ids"`
+	Initiator       TaskInitiator `json:"initiator,omitempty"`
+	KnowledgeBaseID string        `json:"knowledge_base_id,omitempty"`
+}
+
+// KnowledgeListReparsePayload represents the batch knowledge reparse task payload
+type KnowledgeListReparsePayload struct {
+	TracingContext
+	KnowledgeBaseID string                     `json:"knowledge_base_id,omitempty"`
+	TenantID        uint64                     `json:"tenant_id"`
+	KnowledgeIDs    []string                   `json:"knowledge_ids"`
+	ProcessConfig   *KnowledgeProcessOverrides `json:"process_config,omitempty"`
+	Initiator       TaskInitiator              `json:"initiator,omitempty"`
+}
+
+// KnowledgeMovePayload represents the knowledge move task payload
+type KnowledgeMovePayload struct {
+	TracingContext
+	TenantID     uint64        `json:"tenant_id"`
+	TaskID       string        `json:"task_id"`
+	KnowledgeIDs []string      `json:"knowledge_ids"`
+	SourceKBID   string        `json:"source_kb_id"`
+	TargetKBID   string        `json:"target_kb_id"`
+	Mode         string        `json:"mode"` // "reuse_vectors" or "reparse"
+	Initiator    TaskInitiator `json:"initiator,omitempty"`
+}
+
+// KnowledgeMoveProgress represents the progress of a knowledge move task
+type KnowledgeMoveProgress struct {
+	TaskID     string            `json:"task_id"`
+	SourceKBID string            `json:"source_kb_id"`
+	TargetKBID string            `json:"target_kb_id"`
+	Status     KBCloneTaskStatus `json:"status"`
+	Progress   int               `json:"progress"`   // 0-100
+	Total      int               `json:"total"`      // Toplam bilgi sayısı
+	Processed  int               `json:"processed"`  // İşlenen sayı
+	Failed     int               `json:"failed"`     // Başarısız sayı
+	Message    string            `json:"message"`    // Durum mesajı
+	Error      string            `json:"error"`      // Hata bilgisi
+	CreatedAt  int64             `json:"created_at"` // Görev oluşturulma zamanı
+	UpdatedAt  int64             `json:"updated_at"` // Son güncelleme zamanı
+}
+
+// ManualProcessPayload represents the manual knowledge processing task payload.
+// Used for both create (publish) and update operations.
+type ManualProcessPayload struct {
+	TracingContext
+	RequestId       string `json:"request_id"`
+	TenantID        uint64 `json:"tenant_id"`
+	KnowledgeID     string `json:"knowledge_id"`
+	KnowledgeBaseID string `json:"knowledge_base_id"`
+	Content         string `json:"content"`      // cleaned markdown content
+	NeedCleanup     bool   `json:"need_cleanup"` // true for update, false for create
+}
+
+// ImageMultimodalPayload represents the image multimodal processing task payload.
+type ImageMultimodalPayload struct {
+	TracingContext
+	TenantID        uint64 `json:"tenant_id"`
+	KnowledgeID     string `json:"knowledge_id"`
+	KnowledgeBaseID string `json:"knowledge_base_id"`
+	ChunkID         string `json:"chunk_id"`         // parent text chunk
+	ImageURL        string `json:"image_url"`        // provider:// URL (e.g. local://..., minio://...)
+	ImageLocalPath  string `json:"image_local_path"` // deprecated: kept for backward compat with in-flight tasks
+	// EnableOCR and EnableCaption are whole-task switches applied on top of the
+	// image-action policy: a step runs only when both this switch and the
+	// policy allow it. Normal parsing leaves both true and lets the observed
+	// attributes decide.
+	EnableOCR       bool   `json:"enable_ocr"`
+	EnableCaption   bool   `json:"enable_caption"`
+	Language        string `json:"language,omitempty"`          // Request locale for {{language}} in prompt templates
+	ImageSourceType string `json:"image_source_type,omitempty"` // Source type of the image (e.g., "scanned_pdf")
+	// Attempt links this image task back to the parent ProcessDocument
+	// attempt so the worker can record its image[i] subspan under the
+	// same attempt's multimodal stage span.
+	Attempt int `json:"attempt,omitempty"`
+	// ImageIndex is the 0-based ordinal of this image inside the
+	// parent's image set. Used as the subspan name suffix
+	// ("multimodal.image[3]") so the timeline preserves order.
+	ImageIndex int `json:"image_index,omitempty"`
+	// ImageAttrsEnabled selects which image pipeline the task runs — see
+	// PipelineModeFor and the PipelineMode constants. True is the
+	// attribute-observed pipeline: the describe round also observes image
+	// attributes, and the attribute policy decides whether OCR runs for it.
+	// False is the upstream behaviour: a plain caption, then OCR, no attribute
+	// observation. In flight tasks enqueued before the field existed read
+	// false, which is what they were enqueued for — the reason the flag travels
+	// in the payload rather than being re-read from the knowledge base at handle
+	// time.
+	ImageAttrsEnabled bool `json:"image_attrs_enabled,omitempty"`
+	// ImageActions is the attribute→work table, resolved from the KB config at
+	// enqueue time. A task without it — one already in flight when attribute
+	// observation shipped — falls back to the conservative policy: run OCR.
+	ImageActions ImageActionsConfig `json:"image_actions,omitempty"`
+	// SourceLocators place the image in the original file; copied onto the
+	// OCR and caption chunks built from it.
+	SourceLocators SourceLocators `json:"source_locators,omitempty"`
+}
+
+// KnowledgePostProcessPayload represents the knowledge post process task payload.
+type KnowledgePostProcessPayload struct {
+	TracingContext
+	TenantID        uint64 `json:"tenant_id"`
+	KnowledgeID     string `json:"knowledge_id"`
+	KnowledgeBaseID string `json:"knowledge_base_id"`
+	Language        string `json:"language,omitempty"` // Request locale for {{language}} in prompt templates
+	Attempt         int    `json:"attempt,omitempty"`
+}
+
+// KnowledgeAutoTagPayload identifies a document whose parsed content should be
+// classified against the latest set of existing tags in its knowledge base.
+type KnowledgeAutoTagPayload struct {
+	TracingContext
+	TenantID        uint64 `json:"tenant_id"`
+	KnowledgeID     string `json:"knowledge_id"`
+	KnowledgeBaseID string `json:"knowledge_base_id"`
+	Language        string `json:"language,omitempty"`
+	Attempt         int    `json:"attempt,omitempty"`
+}
+
+// KnowledgeBaseProfilePayload asks the worker to rebuild the generated
+// description of one knowledge base from its current document profiles.
+// Force bypasses the aggregate-hash short circuit (manual regeneration).
+type KnowledgeBaseProfilePayload struct {
+	TracingContext
+	TenantID        uint64 `json:"tenant_id"`
+	KnowledgeBaseID string `json:"knowledge_base_id"`
+	Language        string `json:"language,omitempty"`
+	Force           bool   `json:"force,omitempty"`
+}
+
+// KBCloneTaskStatus represents the status of a knowledge base clone task
+type KBCloneTaskStatus string
+
+const (
+	KBCloneStatusPending    KBCloneTaskStatus = "pending"
+	KBCloneStatusProcessing KBCloneTaskStatus = "processing"
+	KBCloneStatusCompleted  KBCloneTaskStatus = "completed"
+	KBCloneStatusFailed     KBCloneTaskStatus = "failed"
+)
+
+// KBCloneProgress represents the progress of a knowledge base clone task
+type KBCloneProgress struct {
+	TaskID    string            `json:"task_id"`
+	SourceID  string            `json:"source_id"`
+	TargetID  string            `json:"target_id"`
+	Status    KBCloneTaskStatus `json:"status"`
+	Progress  int               `json:"progress"`   // 0-100
+	Total     int               `json:"total"`      // Toplam bilgi sayısı
+	Processed int               `json:"processed"`  // İşlenen sayı
+	Message   string            `json:"message"`    // Durum mesajı
+	Error     string            `json:"error"`      // Hata mesajı
+	CreatedAt int64             `json:"created_at"` // Görev oluşturma zamanı
+	UpdatedAt int64             `json:"updated_at"` // Son güncelleme zamanı
+}

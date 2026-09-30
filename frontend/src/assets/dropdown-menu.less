@@ -1,0 +1,634 @@
+/**
+ * Genel birleşik açılır menü stili
+ * 
+ * Aşağıdakiler dahil tüm popup/dropdown menü senaryoları için uygundur:
+ * - Kart işlem menüleri (bilgi tabanı, akıllı ajan, organizasyon)
+ * - Belge işlem menüleri
+ * - Sohbet oturumu menüleri
+ * - Yükleme işlem menüleri
+ * 
+ * Kullanım şekli:
+ * 1. <t-popup> + .popup-menu özel içerik modu: overlayClassName="card-more-popup"
+ * 2. <t-dropdown> TDesign açılır menü modu: Genel stille otomatik eşleşir
+ */
+
+/* Açılır pencere animasyonu*/
+@keyframes dropdownSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dropdownSlideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ============================================
+   Bir: Popup kapsayıcısı için birleşik stil (<t-popup> modu)
+   ============================================ */
+.card-more-popup {
+  z-index: 99 !important;
+
+  .t-popup__content {
+    padding: 4px !important;
+    margin-top: 4px !important;
+    min-width: 192px;
+    border-radius: var(--app-radius-lg) !important;
+    background: var(--td-bg-color-container) !important;
+    border: 0 !important;
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.16) !important;
+    animation: dropdownSlideIn 0.18s cubic-bezier(0.2, 0, 0, 1) both;
+    overflow: hidden;
+  }
+}
+
+.resource-sort-popup .t-popup__content,
+.document-sort-popup .t-popup__content {
+  border-radius: var(--app-radius-lg) !important;
+  background: var(--td-bg-color-container) !important;
+  border: 0 !important;
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.16) !important;
+}
+
+/* ============================================
+   İki: Özel menü öğeleri için birleşik stil (.popup-menu modu)
+   ============================================ */
+.popup-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.popup-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
+  color: var(--td-text-color-primary);
+  font-family: var(--app-font-heading);
+  font-size: var(--app-text-base);
+  font-weight: 400;
+  line-height: 20px;
+  border-radius: var(--app-menu-item-radius);
+  position: relative;
+
+  .menu-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+    color: var(--td-text-color-secondary);
+    transition: background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
+  }
+
+  &:hover {
+    background: var(--td-bg-color-container-hover);
+    color: var(--td-text-color-primary);
+
+    .menu-icon {
+      color: var(--td-text-color-primary);
+    }
+  }
+
+  &:active {
+    background: var(--td-bg-color-container-active);
+  }
+
+  &.delete,
+  &.danger {
+    color: var(--td-error-color-6);
+    margin-top: 4px;
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: -3px;
+      left: 8px;
+      right: 8px;
+      height: 1px;
+      background: var(--td-component-stroke);
+    }
+
+    .menu-icon {
+      color: var(--td-error-color-6);
+    }
+
+    &:hover {
+      background: var(--td-error-color-1);
+      color: var(--td-error-color-6);
+
+      .menu-icon {
+        color: var(--td-error-color-6);
+      }
+    }
+
+    &:active {
+      background: var(--td-error-color-2);
+    }
+  }
+}
+
+/* ============================================
+   Üç: Belge işlem menüsü için birleşik stil (.card-more kapsayıcısı)
+   ============================================ */
+.card-more {
+  z-index: 99 !important;
+
+  .t-popup__content {
+    padding: 4px !important;
+    margin-top: 4px !important;
+    min-width: 192px;
+    box-sizing: border-box;
+    width: auto;
+    border-radius: var(--app-radius-lg) !important;
+    background: var(--td-bg-color-container) !important;
+    border: 0 !important;
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.16) !important;
+    color: var(--td-text-color-primary);
+    animation: dropdownSlideIn 0.18s cubic-bezier(0.2, 0, 0, 1) both;
+    overflow: hidden;
+  }
+
+  .card-menu {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 0;
+
+    &.move-menu {
+      min-width: 220px;
+      max-width: 280px;
+      max-height: 360px;
+      overflow-y: auto;
+      padding: 0;
+      gap: 0;
+    }
+  }
+
+  button.card-menu-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    white-space: nowrap;
+    box-sizing: border-box;
+  }
+
+  .card-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    color: var(--td-text-color-primary);
+    transition: background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
+    border-radius: var(--app-menu-item-radius);
+    font-family: var(--app-font-heading);
+    font-size: var(--app-text-base);
+    font-weight: 400;
+    line-height: 20px;
+
+    &:hover {
+      background: var(--td-bg-color-container-hover);
+    }
+
+    &:active {
+      background: var(--td-bg-color-container-active);
+    }
+
+    .icon {
+      font-size: 16px;
+      color: var(--td-text-color-secondary);
+      transition: background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
+    }
+
+    &:hover .icon {
+      color: var(--td-text-color-primary);
+    }
+
+    &.danger {
+      color: var(--td-error-color-6);
+      margin-top: 4px;
+      position: relative;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: -3px;
+        left: 8px;
+        right: 8px;
+        height: 1px;
+        background: var(--td-component-stroke);
+      }
+
+      .icon {
+        color: var(--td-error-color-6);
+      }
+
+      &:hover {
+        background: var(--td-error-color-1);
+        color: var(--td-error-color-6);
+
+        .icon {
+          color: var(--td-error-color-6);
+        }
+      }
+
+      &:active {
+        background: var(--td-error-color-2);
+      }
+    }
+  }
+
+  .move-menu-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: var(--app-text-md);
+    font-weight: 500;
+    color: var(--td-text-color-primary);
+    border-bottom: 1px solid var(--td-component-stroke);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--td-bg-color-container-hover);
+    }
+  }
+
+  .move-menu-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 0;
+  }
+
+  .move-menu-empty {
+    padding: 12px 16px;
+    font-size: var(--app-text-sm);
+    color: var(--td-text-color-placeholder);
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .move-target-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .move-target-count {
+    font-size: var(--app-text-sm);
+    color: var(--td-text-color-placeholder);
+  }
+
+  .move-confirm-body {
+    padding: 8px;
+
+    .move-target-info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      background: var(--td-bg-color-container-hover);
+      border-radius: var(--app-radius-sm);
+      font-size: var(--app-text-md);
+      color: var(--td-text-color-secondary);
+      margin-bottom: 8px;
+    }
+
+    .move-mode-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      padding: 6px 8px;
+      border-radius: var(--app-radius-sm);
+      cursor: pointer;
+      margin-bottom: 4px;
+
+      &:hover {
+        background: var(--td-bg-color-container-hover);
+      }
+
+      &.active {
+        background: var(--td-brand-color-light);
+      }
+
+      .move-mode-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+
+        .move-mode-label {
+          font-size: var(--app-text-md);
+          font-weight: 500;
+          color: var(--td-text-color-primary);
+        }
+
+        .move-mode-desc {
+          font-size: var(--app-text-xs);
+          color: var(--td-text-color-placeholder);
+          line-height: 1.4;
+        }
+      }
+    }
+
+    .move-confirm-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 8px;
+    }
+  }
+}
+
+/* ============================================
+   Dört, TDesign Dropdown için birleşik stil
+   body üzerine bağlanan <t-dropdown> bileşeni için geçerlidir
+   ============================================ */
+.t-popup__content.t-dropdown {
+  border: 0;
+  border-radius: var(--app-radius-lg);
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.16);
+}
+
+.t-popup__content {
+  .t-dropdown__menu {
+    background: var(--td-bg-color-container);
+    border: 0;
+    box-shadow: none;
+    gap: 0;
+    padding: 4px;
+    min-width: 192px;
+    animation: dropdownSlideIn 0.18s cubic-bezier(0.2, 0, 0, 1) both;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color var(--app-motion-base) ease;
+
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background-color: transparent;
+      border: none;
+      border-radius: var(--app-radius-sm);
+      transition: background-color var(--app-motion-base) ease;
+    }
+
+    &:hover {
+      scrollbar-color: var(--td-scrollbar-color) transparent;
+
+      &::-webkit-scrollbar-thumb {
+        background-color: var(--td-scrollbar-color);
+      }
+    }
+
+    &::-webkit-scrollbar-thumb:hover {
+      background-color: var(--td-scrollbar-hover-color);
+    }
+  }
+
+  .t-dropdown__item {
+    padding: 8px 12px;
+    border-radius: var(--app-menu-item-radius);
+    margin: 0;
+    transition: background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
+    font-family: var(--app-font-heading);
+    font-size: var(--app-text-base);
+    font-weight: 400;
+    line-height: 20px;
+    color: var(--td-text-color-primary);
+    cursor: pointer;
+    min-width: auto !important;
+    max-width: 100% !important;
+    display: flex !important;
+    align-items: center;
+    width: 100%;
+    position: relative;
+
+    &:hover {
+      background: var(--td-bg-color-container-hover);
+      color: var(--td-text-color-primary);
+    }
+
+    &:active {
+      background: var(--td-bg-color-container-active);
+    }
+
+    .t-dropdown__item-icon {
+      flex-shrink: 0;
+      margin-right: 10px;
+      color: var(--td-text-color-secondary);
+      display: flex;
+      align-items: center;
+      transition: background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
+
+      .t-icon {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+      }
+    }
+
+    &:hover .t-dropdown__item-icon {
+      color: var(--td-text-color-primary);
+    }
+
+    .t-dropdown__item-text {
+      color: inherit !important;
+      font-size: var(--app-text-base) !important;
+      line-height: 20px !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      flex: 1;
+      min-width: 0;
+      display: block;
+    }
+
+    // Keep the selected row neutral like the reference menu.
+    &.t-dropdown__item--theme-default:not(.t-dropdown__item--disabled) {
+      &:hover { color: var(--td-text-color-primary); }
+      &.t-dropdown__item--active { color: var(--td-text-color-primary); }
+    }
+
+    /* TDesign error tema öğesi (silme işlemi)*/
+    &.t-dropdown__item--theme-error {
+      color: var(--td-error-color-6) !important;
+      margin-top: 4px;
+      position: relative;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: -3px;
+        left: 8px;
+        right: 8px;
+        height: 1px;
+        background: var(--td-component-stroke);
+      }
+
+      .t-dropdown__item-icon {
+        color: var(--td-error-color-6);
+      }
+
+      &:hover {
+        background: var(--td-error-color-1);
+        color: var(--td-error-color-6) !important;
+
+        .t-dropdown__item-icon {
+          color: var(--td-error-color-6);
+        }
+      }
+
+      &:active {
+        background: var(--td-error-color-2);
+      }
+    }
+  }
+}
+
+
+
+
+
+/* ============================================
+   Beş, sabitlenmiş form/onay katmanları (üye daveti, Wiki taşıma/silme vb.)
+   ============================================ */
+.anchored-form-popup-overlay {
+  z-index: 3500 !important;
+
+  .t-popup__content {
+    padding: 14px 16px !important;
+    min-width: 300px;
+    max-width: min(392px, calc(100vw - 24px));
+    border-radius: var(--app-radius-xl) !important;
+    background: var(--td-bg-color-container) !important;
+    border: 0.5px solid var(--td-component-stroke) !important;
+    box-shadow:
+      0 0 0 0.5px rgba(0, 0, 0, 0.03),
+      0 2px 4px rgba(0, 0, 0, 0.04),
+      0 8px 24px rgba(0, 0, 0, 0.1) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  }
+}
+
+.anchored-form-popup-inner {
+  max-width: 100%;
+}
+
+.anchored-form-popup-title {
+  font-size: var(--app-text-lg);
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+  margin: 0 0 12px;
+  line-height: 1.35;
+}
+
+.anchored-form-popup-body {
+  padding: 0 0 4px;
+  color: var(--td-text-color-primary);
+  font-size: var(--app-text-base);
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.anchored-form-popup-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+// Standalone card (teleport / fixed anchor) — same visual tokens as overlay above.
+.anchored-form-popup-card {
+  padding: 14px 16px;
+  min-width: 300px;
+  max-width: min(392px, calc(100vw - 24px));
+  border-radius: var(--app-radius-xl);
+  background: var(--td-bg-color-container);
+  border: 0.5px solid var(--td-component-stroke);
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.03),
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 8px 24px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* ============================================
+   Altı, koyu mod iyileştirmeleri
+   ============================================ */
+:root[theme-mode="dark"] {
+  .card-more-popup .t-popup__content,
+  .card-more .t-popup__content,
+  .resource-sort-popup .t-popup__content,
+  .document-sort-popup .t-popup__content,
+  .anchored-form-popup-overlay .t-popup__content,
+  .t-select__dropdown .t-popup__content,
+  .t-popup__content:has(.t-dropdown__menu),
+  .model-selector-dropdown,
+  .agent-mode-selector-dropdown,
+  .agent-selector-dropdown,
+  .tenant-dropdown,
+  .tenant-submenu-floating,
+  .user-dropdown,
+  .kb-dropdown,
+  .mention-menu {
+    background: var(--td-bg-color-container) !important;
+    box-shadow: 0 4px 14px var(--td-bg-color-page) !important;
+  }
+
+  .anchored-form-popup-card {
+    background: rgba(36, 36, 36, 0.92);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 0 0 0.5px rgba(255, 255, 255, 0.05),
+      0 2px 4px rgba(0, 0, 0, 0.12),
+      0 8px 32px rgba(0, 0, 0, 0.28);
+  }
+
+  .t-popup__content.t-dropdown {
+    box-shadow: 0 4px 14px var(--td-bg-color-page);
+  }
+
+  .t-popup__content .t-dropdown__menu {
+    background: var(--td-bg-color-container);
+    border: 0;
+    box-shadow: none;
+
+    &:hover {
+      scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+
+      &::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.22);
+      }
+    }
+
+    &::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(255, 255, 255, 0.38);
+    }
+  }
+}

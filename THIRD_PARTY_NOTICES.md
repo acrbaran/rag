@@ -1,0 +1,72 @@
+# Third-party notices and corresponding source
+
+This file supplements the third-party notices in `LICENSE`. The MIT license
+for Rethra's own code does not replace the licenses of third-party components.
+Keep this file, `LICENSE`, and the `licenses/` directory with redistributed
+backend packages. `scripts/copy-licenses.sh` adds checksum-verified
+source archives at packaging time; they are not stored in this Git repository.
+Container distributions include the complete bundle in `/app`;
+
+## Go MySQL Driver
+
+- Component: `github.com/go-sql-driver/mysql`, version `v1.10.0`.
+- Used in backend binaries, including the Doris MySQL protocol driver.
+- License: Mozilla Public License 2.0, reproduced in
+  [`licenses/go-sql-driver-mysql-MPL-2.0.txt`](licenses/go-sql-driver-mysql-MPL-2.0.txt).
+- Copyright: The Go-MySQL-Driver Authors; the original per-file notices and
+  `AUTHORS` are preserved in the accompanying source archive.
+- Modifications by Rethra: none. Dialer configuration is in separate Rethra files.
+- Corresponding source, available under MPL-2.0, is included in binary releases
+  as `licenses/sources/mysql-v1.10.0.zip`. Source repository users can obtain it from the
+  [Go module proxy](https://proxy.golang.org/github.com/go-sql-driver/mysql/@v/v1.10.0.zip)
+  and [upstream repository](https://github.com/go-sql-driver/mysql/tree/v1.10.0).
+
+## go-m1cpu
+
+- Component: `github.com/shoenig/go-m1cpu`, version `v0.1.6`.
+- Used by the macOS backend dependency chain through gopsutil. It is
+  absent from Linux backend build dependencies. Its source is included in all
+  notice bundles for consistent packaging; this does not imply Linux linkage.
+- License: Mozilla Public License 2.0, reproduced in
+  [`licenses/go-m1cpu-MPL-2.0.txt`](licenses/go-m1cpu-MPL-2.0.txt).
+- Attribution: the go-m1cpu project and its contributors. The complete original
+  source and notices are preserved in the accompanying archive.
+- Modifications by Rethra: none.
+- Corresponding source, available under MPL-2.0, is included in binary releases
+  as `licenses/sources/go-m1cpu-v0.1.6.zip`. Source repository users can obtain it from the
+  [Go module proxy](https://proxy.golang.org/github.com/shoenig/go-m1cpu/@v/v0.1.6.zip)
+  and [upstream repository](https://github.com/shoenig/go-m1cpu/tree/v0.1.6).
+
+## OpenCC dictionary data
+
+- Files: `internal/textconv/data/TSPhrases.txt` and `TSCharacters.txt`, copied
+  unchanged from `github.com/longbridgeapp/opencc` version `v0.3.13`.
+- Attribution: the OpenCC and longbridge/opencc contributors.
+- License: Apache-2.0, reproduced in
+  [`licenses/OpenCC-Apache-2.0.txt`](licenses/OpenCC-Apache-2.0.txt).
+- Source: [versioned dictionary directory](https://github.com/longbridgeapp/opencc/tree/v0.3.13/dictionary)
+  and the two text files distributed with Rethra's source.
+- Only dictionary data is retained. Rethra uses its own standard-library lookup
+  implementation; the upstream Go converter, `liuzl/da`, and GPL-licensed
+  `cedar-go` code are not included.
+
+## Build-only component
+
+`cbindgen` 0.29.4 (MPL-2.0) generates the AnyDoc C ABI header during the Rust
+build. Its code/tool executable is not copied into the runtime image or release
+packages by the current build recipes. Generating the header does not copy the
+tool's implementation into the product. If distributing build environments or
+the tool itself, retain its license and provide its corresponding source too.
+
+## Maintaining this bundle
+
+When upgrading either MPL module, update the version, license, and SHA-256 pin in
+`licenses/sources/modules.tsv` together. Archives are unmodified Go module proxy
+ZIPs, including their original copyright notices. Verify them with
+`go mod download -json` and the module's `go.sum` entry before updating.
+`scripts/check-license-bundle.sh` checks the pins and notices without downloading
+dependencies. `scripts/copy-licenses.sh DESTINATION` obtains the pinned archives
+through Go's configured `GOPROXY` and module cache, verifies their SHA-256 hashes,
+and includes them in the destination bundle. Offline packaging requires those
+module archives to be present in the Go module cache beforehand. To verify a
+packaged source directory, run `scripts/check-license-bundle.sh PATH/TO/licenses/sources`.

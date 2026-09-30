@@ -1,0 +1,97 @@
+<template>
+  <div class="wk-empty-state" :class="{ 'wk-empty-state--compact': compact }">
+    <div v-if="$slots.icon || icon || image" class="wk-empty-state__icon">
+      <slot name="icon">
+        <img v-if="image" :src="image" alt="" aria-hidden="true" />
+        <t-icon v-else :name="icon" />
+      </slot>
+    </div>
+    <div class="wk-empty-state__title">{{ title }}</div>
+    <div v-if="description || $slots.description" class="wk-empty-state__desc">
+      <slot name="description">{{ description }}</slot>
+    </div>
+    <div v-if="$slots.default" class="wk-empty-state__actions">
+      <slot />
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+/**
+ * Birleşik boş durum: simge / başlık / açıklama / işlem alanı.
+ * Liste sayfalarında `icon` (TDesign simge adı) kullanılır, illüstrasyon gerektiğinde `image` kullanılır; `compact` çekmece, kart gibi küçük kapsayıcılar içindir.
+ */
+withDefaults(
+  defineProps<{
+    title: string
+    description?: string
+    icon?: string
+    image?: string
+    compact?: boolean
+  }>(),
+  { description: '', icon: '', image: '', compact: false },
+)
+</script>
+
+<style lang="less" scoped>
+.wk-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 56px 20px;
+
+  &--compact {
+    padding: 32px 16px;
+  }
+}
+
+.wk-empty-state__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  border-radius: 50%;
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-placeholder);
+  font-size: 30px;
+
+  img {
+    width: 40px;
+    height: 40px;
+  }
+
+  .wk-empty-state--compact & {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    font-size: 22px;
+  }
+}
+
+.wk-empty-state__title {
+  color: var(--td-text-color-primary);
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.wk-empty-state__desc {
+  margin-top: 6px;
+  max-width: 360px;
+  color: var(--td-text-color-secondary);
+  font-size: var(--app-text-md);
+  line-height: 20px;
+}
+
+.wk-empty-state__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+</style>

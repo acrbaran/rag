@@ -1,0 +1,134 @@
+{{/*
+Copyright 2025 Tencent
+SPDX-License-Identifier: MIT
+
+Post-installation notes for Rethra Helm chart.
+Ref: https://github.com/argoproj/argo-helm/blob/main/charts/argo-cd/templates/NOTES.txt
+*/}}
+
+================================================================================
+  Rethra has been installed successfully!
+================================================================================
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Version: {{ .Chart.AppVersion }}
+
+--------------------------------------------------------------------------------
+  ACCESSING RETHRA
+--------------------------------------------------------------------------------
+
+{{- if .Values.ingress.enabled }}
+Rethra is accessible via Ingress:
+
+  URL: {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}
+
+{{- else }}
+
+To access Rethra, use port-forwarding:
+
+  # Frontend (Web UI)
+  kubectl port-forward svc/frontend -n {{ .Release.Namespace }} 8080:80
+
+  # Then open: http://localhost:8080
+
+{{- end }}
+
+{{- if not .Values.ingress.enabled }}
+
+To expose Rethra externally, enable Ingress:
+
+  helm upgrade {{ .Release.Name }} ./helm \
+    --set ingress.enabled=true \
+    --set ingress.host=rethra.example.com
+
+{{- end }}
+
+--------------------------------------------------------------------------------
+  CONFIGURATION
+--------------------------------------------------------------------------------
+
+Components deployed:
+{{- if .Values.app.enabled }}
+  - Backend API ({{ include "rethra.app.image" . }})
+{{- end }}
+{{- if .Values.frontend.enabled }}
+  - Frontend UI ({{ include "rethra.frontend.image" . }})
+{{- end }}
+{{- if .Values.docreader.enabled }}
+  - Document Reader ({{ include "rethra.docreader.image" . }})
+{{- end }}
+{{- if .Values.postgresql.enabled }}
+  - PostgreSQL/ParadeDB ({{ include "rethra.postgresql.image" . }})
+{{- end }}
+{{- if .Values.redis.enabled }}
+  - Redis ({{ include "rethra.redis.image" . }})
+{{- end }}
+
+{{- if or .Values.minio.enabled .Values.neo4j.enabled .Values.qdrant.enabled }}
+
+Optional components enabled:
+{{- if .Values.minio.enabled }}
+  - MinIO (S3-compatible storage)
+{{- end }}
+{{- if .Values.neo4j.enabled }}
+  - Neo4j (Knowledge Graph)
+{{- end }}
+{{- if .Values.qdrant.enabled }}
+  - Qdrant (Vector Database)
+{{- end }}
+{{- end }}
+
+--------------------------------------------------------------------------------
+  CONNECTING TO LLM
+--------------------------------------------------------------------------------
+
+Rethra requires an LLM backend. Add a remote model in the web UI's model
+settings, then select it when initializing a knowledge base.
+
+Supported LLM backends:
+  - OpenAI API compatible endpoints
+  - Qwen, DeepSeek, and other Chinese LLMs
+
+{{- if .Values.neo4j.enabled }}
+
+--------------------------------------------------------------------------------
+  GRAPHRAG (KNOWLEDGE GRAPH)
+--------------------------------------------------------------------------------
+
+Neo4j is enabled for GraphRAG feature.
+
+To use GraphRAG, enable Neo4j. NEO4J_ENABLE is the sole graph switch and is
+injected automatically when neo4j.enabled=true (no need to set ENABLE_GRAPH_RAG,
+which is deprecated and no longer read by the app):
+
+  helm upgrade {{ .Release.Name }} ./helm \
+    --set neo4j.enabled=true \
+    --set neo4j.password=<your-secure-password>
+
+Access Neo4j Browser:
+  kubectl port-forward svc/neo4j -n {{ .Release.Namespace }} 7474:7474 7687:7687
+  # Open: http://localhost:7474
+
+{{- end }}
+
+--------------------------------------------------------------------------------
+  DOCUMENTATION
+--------------------------------------------------------------------------------
+
+  GitHub:  https://github.com/acrbaran/rag
+  API Docs: https://github.com/acrbaran/rag/blob/main/website-docs/04-api/01-api-overview.md
+  FAQ:     https://github.com/acrbaran/rag/blob/main/website-docs/01-getting-started/05-troubleshooting.md
+
+--------------------------------------------------------------------------------
+  TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+Check pod status:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+View logs:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=app -f
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=frontend -f
+
+================================================================================

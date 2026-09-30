@@ -1,0 +1,95 @@
+/* Shared table finish. Page-specific widths, alignment and sticky headers stay local. */
+:root {
+  --app-table-head: color-mix(in srgb, var(--td-text-color-primary) 3%, var(--td-bg-color-container));
+  --app-table-row: var(--td-bg-color-container);
+  --app-table-stripe: color-mix(in srgb, var(--td-text-color-primary) 1.5%, var(--td-bg-color-container));
+  --app-table-hover: color-mix(in srgb, var(--td-brand-color) 5%, var(--td-bg-color-container));
+  --app-table-rule: color-mix(in srgb, var(--td-text-color-primary) 11%, transparent);
+}
+
+:is(.t-table, .api-key-table, .layer-table, .permission-table, .results-table, .chat-markdown-table table) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* TDesign inherits row backgrounds into cells. */
+.t-table {
+  background: var(--app-table-row);
+  color: var(--td-text-color-primary);
+}
+
+.t-table thead th,
+.t-table thead td {
+  border-bottom: 1px solid var(--app-table-rule) !important;
+  white-space: nowrap;
+}
+
+.t-table tbody td,
+.t-table tbody th {
+  border-bottom: 1px solid var(--app-table-rule) !important;
+  color: var(--td-text-color-primary);
+  line-height: 1.5;
+  vertical-align: middle;
+}
+
+.t-table .t-table__selection-cell,
+.t-table .t-table__expandable-icon-cell,
+.t-table .t-table__expanded-row > td,
+.t-table .t-table__row--full > td {
+  padding: 0 !important;
+}
+
+.t-table tbody tr:last-child > td,
+.t-table tbody tr:last-child > th {
+  border-bottom: 0 !important;
+}
+
+.t-table.t-table--striped > .t-table__content > table > tbody > tr:nth-of-type(odd):not(.t-table__expanded-row),
+.t-table.t-table--striped.t-table--header-fixed > .t-table__content > table > tbody > tr:nth-of-type(even) {
+  background: var(--app-table-stripe);
+}
+
+.t-table.t-table--hoverable tbody tr:hover,
+.t-table.t-table--striped.t-table--hoverable > .t-table__content > table > tbody tr:hover {
+  background: var(--app-table-hover) !important;
+}
+
+.t-table tbody tr:focus-within {
+  background: var(--app-table-hover);
+}
+
+.t-table__pagination {
+  border-top: 1px solid var(--app-table-rule);
+  background: var(--app-table-row);
+}
+
+/* The native tables share the same surface without changing their column layouts. */
+:is(.api-key-table, .layer-table, .permission-table, .results-table, .chat-markdown-table table) thead th {
+  background-color: var(--app-table-head) !important;
+  border-bottom: 1px solid var(--app-table-rule) !important;
+  color: var(--td-text-color-secondary) !important;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  letter-spacing: 0.015em;
+}
+
+:is(.api-key-table, .layer-table, .permission-table, .results-table, .chat-markdown-table table) tbody tr {
+  background-color: var(--app-table-row) !important;
+}
+
+:is(.api-key-table, .layer-table, .permission-table, .results-table, .chat-markdown-table table) tbody tr:nth-child(even) {
+  background-color: var(--app-table-stripe) !important;
+}
+
+:is(.api-key-table, .layer-table, .permission-table, .results-table, .chat-markdown-table table) tbody tr:hover,
+:is(.api-key-table, .layer-table, .permission-table, .results-table, .chat-markdown-table table) tbody tr:focus-within {
+  background-color: var(--app-table-hover) !important;
+}
+
+:is(.api-key-table, .layer-table, .permission-table, .results-table, .chat-markdown-table table) tbody :is(td, th) {
+  border-bottom-color: var(--app-table-rule);
+}
+
+:is(.api-key-table-wrap, .results-table-container, .chat-markdown-table) {
+  scrollbar-color: var(--td-component-border) transparent;
+  scrollbar-width: thin;
+}

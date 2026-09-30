@@ -1,0 +1,703 @@
+package handler
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+
+	apprepo "github.com/acrbaran/rag/internal/application/repository"
+	"github.com/acrbaran/rag/internal/application/service"
+	"github.com/acrbaran/rag/internal/config"
+	apperrors "github.com/acrbaran/rag/internal/errors"
+	"github.com/acrbaran/rag/internal/logger"
+	"github.com/acrbaran/rag/internal/types"
+	"github.com/acrbaran/rag/internal/types/interfaces"
+	secutils "github.com/acrbaran/rag/internal/utils"
+)
+
+// TenantInvitationHandler exposes the tenant-scoped CRUD on the
+// `tenant_invitations` table plus the user-self-service inbox endpoints
+// (/me/invitations*). Route-level RBAC: tenant routes are Owner-gated
+// (POST/DELETE) or Viewer-gated (GET); inbox routes only require
+// authentication (the service enforces "only invitee can act").
+type TenantInvitationHandler struct {
+	invitationService interfaces.TenantInvitationService
+	userService       interfaces.UserService
+	tenantService     interfaces.TenantService
+	memberService     interfaces.TenantMemberService
+	systemSettingSvc  interfaces.SystemSettingService
+	configInfo        *config.Config
+}
+
+// NewTenantInvitationHandler wires the dependencies. tenantService hydrates
+// tenant names in the inbox view; configInfo supplies FrontendBaseURL for
+// share-link URL composition. memberService + systemSettingSvc back the
+// auto-accept switch (tenant.auto_accept_invitation); both are nil-guarded
+// for tests (production wiring always injects both).
+func NewTenantInvitationHandler(
+	invitationService interfaces.TenantInvitationService,
+	userService interfaces.UserService,
+	tenantService interfaces.TenantService,
+	memberService interfaces.TenantMemberService,
+	systemSettingSvc interfaces.SystemSettingService,
+	configInfo *config.Config,
+) *TenantInvitationHandler {
+	return &TenantInvitationHandler{
+		invitationService: invitationService,
+		userService:       userService,
+		tenantService:     tenantService,
+		memberService:     memberService,
+		systemSettingSvc:  systemSettingSvc,
+		configInfo:        configInfo,
+	}
+}
+
+// createInvitationRequest is the JSON body for POST /tenants/:id/invitations.
+// Email is the user-facing identifier; the handler resolves it to a
+// User row before delegating to the service. The optional Message is
+// surfaced in the invitee's inbox.
+type createInvitationRequest struct {
+	Email   string           `json:"email" binding:"required,email"`
+	Role    types.TenantRole `json:"role" binding:"required"`
+	Message string           `json:"message"`
+}
+
+// parseInvitationIDFromPath reads :inv_id off the gin context.
+func parseInvitationIDFromPath(c *gin.Context) (uint64, bool) {
+	raw := strings.TrimSpace(c.Param("inv_id"))
+	if raw == "" {
+		c.Error(apperrors.NewValidationError("invitation id is required"))
+		return 0, false
+	}
+	v, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil || v == 0 {
+		c.Error(apperrors.NewValidationError("invitation id must be a positive integer"))
+		return 0, false
+	}
+	return v, true
+}
+
+// projectInvitation hydrates a single TenantInvitation row into the
+// API response shape. Inviter / invitee user fields and the tenant
+// name are filled best-effort: a missing row degrades to the bare id
+// rather than dropping the response. usersByID and tenantsByID let the
+// caller batch the lookups when projecting a list.
+//
+// Share-link rows (InviteeUserID == "") get the IsShareLink flag set
+// so the SPA can render them differently. invite_url is NOT populated
+// here — projectInvitationWithLink layers it on for the management
+// view that needs the copy-link affordance.
+func projectInvitation(
+	inv *types.TenantInvitation,
+	usersByID map[string]*types.User,
+	tenantsByID map[uint64]*types.Tenant,
+) types.TenantInvitationResponse {
+	resp := types.TenantInvitationResponse{
+		ID:            inv.ID,
+		TenantID:      inv.TenantID,
+		InviteeUserID: inv.InviteeUserID,
+		InvitedBy:     inv.InvitedBy,
+		Role:          inv.Role,
+		Status:        inv.Status,
+		Message:       inv.Message,
+		ExpiresAt:     inv.ExpiresAt,
+		RespondedAt:   inv.RespondedAt,
+		CreatedAt:     inv.CreatedAt,
+		IsShareLink:   inv.InviteeUserID == "",
+		AcceptedCount: inv.AcceptedCount,
+	}
+	if u, ok := usersByID[inv.InviteeUserID]; ok && u != nil {
+		resp.InviteeEmail = u.Email
+		resp.InviteeName = u.Username
+	}
+	if inv.InvitedBy != nil {
+		if u, ok := usersByID[*inv.InvitedBy]; ok && u != nil {
+			resp.InviterEmail = u.Email
+			resp.InviterName = u.Username
+		}
+	}
+	if t, ok := tenantsByID[inv.TenantID]; ok && t != nil {
+		resp.TenantName = t.Name
+	}
+	return resp
+}
+
+// projectInvitationWithLink layers invite_url on top of projectInvitation
+// for share-link rows that are still pending. The Owner-facing list and
+// the create response go through here so a "copy link" button can sit
+// on every active row — Owners can dispatch the link on demand without
+// the "copy now or revoke" pressure.
+//
+// The /me/invitations inbox path does NOT use this helper: per-user
+// invitees don't have a token to copy.
+func (h *TenantInvitationHandler) projectInvitationWithLink(
+	inv *types.TenantInvitation,
+	usersByID map[string]*types.User,
+	tenantsByID map[uint64]*types.Tenant,
+) types.TenantInvitationResponse {
+	resp := projectInvitation(inv, usersByID, tenantsByID)
+	if inv.Status == types.TenantInvitationStatusPending && inv.Token != "" {
+		resp.InviteURL = buildInviteRegisterURL(h.configInfo, inv.Token)
+	}
+	return resp
+}
+
+// hydrateUsers batches GetUsersByIDs over the (invitee, inviter) pairs.
+// Best-effort: a transient lookup failure logs and returns an empty
+// map so the projection falls back to ids.
+func (h *TenantInvitationHandler) hydrateUsers(c *gin.Context, invs []*types.TenantInvitation) map[string]*types.User {
+	if len(invs) == 0 {
+		return map[string]*types.User{}
+	}
+	idSet := make(map[string]struct{}, len(invs)*2)
+	for _, inv := range invs {
+		idSet[inv.InviteeUserID] = struct{}{}
+		if inv.InvitedBy != nil {
+			idSet[*inv.InvitedBy] = struct{}{}
+		}
+	}
+	ids := make([]string, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+	users, err := h.userService.GetUsersByIDs(c.Request.Context(), ids)
+	if err != nil {
+		logger.Warnf(c.Request.Context(), "invitation list: batch user hydrate failed: %v", err)
+		return map[string]*types.User{}
+	}
+	return users
+}
+
+// hydrateTenants is the same idea over the distinct tenant_ids touched
+// by `invs`. Used by the /me inbox view where invitations span tenants.
+func (h *TenantInvitationHandler) hydrateTenants(c *gin.Context, invs []*types.TenantInvitation) map[uint64]*types.Tenant {
+	if len(invs) == 0 || h.tenantService == nil {
+		return map[uint64]*types.Tenant{}
+	}
+	idSet := make(map[uint64]struct{}, len(invs))
+	for _, inv := range invs {
+		idSet[inv.TenantID] = struct{}{}
+	}
+	ids := make([]uint64, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+	tenants, err := h.tenantService.GetTenantsByIDs(c.Request.Context(), ids)
+	if err != nil {
+		logger.Warnf(c.Request.Context(), "invitation list: batch tenant hydrate failed: %v", err)
+		return map[uint64]*types.Tenant{}
+	}
+	return tenants
+}
+
+// ListTenantInvitations godoc
+// @Summary      Alan davetlerini listele
+// @Description  Alana göre bekleyen / geçmiş davetleri listeler. query include_terminal=true olduğunda accepted/declined/revoked/expired da eklenir.
+// @Tags         Alan Davetleri
+// @Produce      json
+// @Param        id                path   string  true   "Alan ID"
+// @Param        include_terminal  query  bool    false  "Sonlandırılmış durumdaki satırlar dahil edilsin mi (varsayılan false)"
+// @Param        page              query  int     false  "Sayfa numarası (1’den başlar)"  default(1)
+// @Param        page_size         query  int     false  "Sayfa başına öğe sayısı"  default(20)
+// @Success      200  {object}  map[string]interface{}
+// @Security     Bearer
+// @Router       /tenants/{id}/invitations [get]
+func (h *TenantInvitationHandler) ListTenantInvitations(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantID, ok := parseTenantIDFromPath(c)
+	if !ok {
+		return
+	}
+	includeTerminal := strings.EqualFold(c.Query("include_terminal"), "true")
+
+	page, pageSize, ok := parseListPagination(c)
+	if !ok {
+		return
+	}
+
+	rows, total, err := h.invitationService.ListTenantInvitationsPage(ctx, tenantID, includeTerminal, page, pageSize)
+	if err != nil {
+		logger.Errorf(ctx, "ListTenantInvitationsPage failed: tenant=%d err=%v", tenantID, err)
+		c.Error(apperrors.NewInternalServerError("failed to list invitations").WithDetails(err.Error()))
+		return
+	}
+
+	usersByID := h.hydrateUsers(c, rows)
+	showShareLinks := types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleOwner)
+	resp := make([]types.TenantInvitationResponse, 0, len(rows))
+	for _, inv := range rows {
+		// Within the tenant view we don't bother hydrating tenant name
+		// (the caller already knows the tenant). Pass an empty map.
+		// Share-link URLs embed the registration token — only Owners may
+		// re-copy them; other roles see metadata without invite_url.
+		if showShareLinks {
+			resp = append(resp, h.projectInvitationWithLink(inv, usersByID, nil))
+		} else {
+			resp = append(resp, projectInvitation(inv, usersByID, nil))
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"invitations": resp,
+			"total":       total,
+			"page":        page,
+			"page_size":   pageSize,
+		},
+	})
+}
+
+// CreateInvitation godoc
+// @Summary      Alan daveti gönder
+// @Description  Owner, kayıtlı kullanıcıları e-posta yoluyla alana katılmaya davet eder. tenant.auto_accept_invitation etkinse davet edilen kişi hemen otomatik olarak katılır (yanıt üye yapısıdır); aksi hâlde üye olmak için /me/invitations üzerinden kabul etmesi gerekir.
+// @Tags         Alan Davetleri
+// @Accept       json
+// @Produce      json
+// @Param        id       path  string                   true  "Alan ID'si"
+// @Param        request  body  createInvitationRequest  true  "Davet isteği"
+// @Success      201  {object}  map[string]interface{}
+// @Security     Bearer
+// @Router       /tenants/{id}/invitations [post]
+func (h *TenantInvitationHandler) CreateInvitation(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantID, ok := parseTenantIDFromPath(c)
+	if !ok {
+		return
+	}
+
+	var req createInvitationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(apperrors.NewValidationError("invalid request body").WithDetails(err.Error()))
+		return
+	}
+	if !req.Role.IsValid() {
+		c.Error(apperrors.NewValidationError("role must be one of owner/admin/contributor/viewer"))
+		return
+	}
+
+	user, err := h.userService.GetUserByEmail(ctx, strings.TrimSpace(req.Email))
+	if err != nil {
+		if errors.Is(err, apprepo.ErrUserNotFound) {
+			c.Error(apperrors.NewNotFoundError(
+				"user with this email is not registered; ask them to sign up first"))
+			return
+		}
+		logger.Errorf(ctx, "GetUserByEmail failed: email=%s err=%v",
+			secutils.SanitizeForLog(req.Email), err)
+		c.Error(apperrors.NewInternalServerError("failed to look up user").WithDetails(err.Error()))
+		return
+	}
+
+	caller, _ := types.UserIDFromContext(ctx)
+	var invitedBy *string
+	if caller != "" && !types.IsSyntheticUserID(caller) {
+		invitedBy = &caller
+	}
+
+	// Auto-accept switch (tenant.auto_accept_invitation): skip the pending
+	// invitation and add the already-registered invitee as a member.
+	if h.systemSettingSvc != nil &&
+		h.systemSettingSvc.GetBool(ctx, "tenant.auto_accept_invitation", "RETHRA_TENANT_AUTO_ACCEPT_INVITATION", false) {
+		if h.memberService == nil {
+			logger.Errorf(ctx, "auto_accept_invitation enabled but memberService is nil; tenant=%d", tenantID)
+			c.Error(apperrors.NewInternalServerError("failed to add member"))
+			return
+		}
+		h.autoAcceptInvitationAndRespond(c, ctx, user, tenantID, req.Role, invitedBy)
+		return
+	}
+
+	inv, err := h.invitationService.Create(ctx, tenantID, user.ID, req.Role, invitedBy, req.Message)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvalidTenantRole):
+			c.Error(apperrors.NewValidationError(err.Error()))
+		case errors.Is(err, service.ErrAPIKeyCannotAssignOwner):
+			c.Error(apperrors.NewForbiddenError(err.Error()))
+		case errors.Is(err, service.ErrPendingInvitationExists):
+			c.Error(apperrors.NewConflictError(err.Error()))
+		case errors.Is(err, service.ErrAlreadyMember):
+			c.Error(apperrors.NewConflictError(err.Error()))
+		default:
+			logger.Errorf(ctx, "CreateInvitation failed: user=%s tenant=%d err=%v",
+				user.ID, tenantID, err)
+			c.Error(apperrors.NewInternalServerError("failed to create invitation").WithDetails(err.Error()))
+		}
+		return
+	}
+
+	usersByID := map[string]*types.User{user.ID: user}
+	if invitedBy != nil {
+		// Best-effort hydrate inviter too. Errors are swallowed —
+		// the response degrades to just the invitee fields.
+		if u, lookupErr := h.userService.GetUserByID(ctx, *invitedBy); lookupErr == nil && u != nil {
+			usersByID[u.ID] = u
+		}
+	}
+	resp := projectInvitation(inv, usersByID, nil)
+	c.JSON(http.StatusCreated, gin.H{
+		"success": true,
+		"data":    resp,
+	})
+}
+
+// autoAcceptInvitationAndRespond adds the invitee as an active member,
+// reconciles any stale pending invitation row, and adopts the invited
+// tenant as the invitee's home tenant when they are tenantless (same as
+// AcceptMyInvitation).
+func (h *TenantInvitationHandler) autoAcceptInvitationAndRespond(
+	c *gin.Context,
+	ctx context.Context,
+	user *types.User,
+	tenantID uint64,
+	role types.TenantRole,
+	invitedBy *string,
+) {
+	member, err := h.memberService.AddMember(ctx, user.ID, tenantID, role, invitedBy)
+	if err != nil {
+		writeAddMemberError(c, ctx, user, tenantID, err)
+		return
+	}
+	if h.invitationService != nil {
+		if markErr := h.invitationService.MarkPendingAcceptedIfExists(ctx, tenantID, user.ID); markErr != nil {
+			logger.Warnf(ctx,
+				"auto_accept: failed to reconcile pending invitation for user=%s tenant=%d: %v",
+				user.ID, tenantID, markErr)
+		}
+	}
+	if user.TenantID == 0 {
+		user.TenantID = tenantID
+		if updateErr := h.userService.UpdateUser(ctx, user); updateErr != nil {
+			logger.Errorf(ctx,
+				"auto_accept: member added but default tenant update failed: user=%s tenant=%d err=%v",
+				user.ID, tenantID, updateErr)
+			c.Error(apperrors.NewInternalServerError(
+				"member added but default workspace update failed").WithDetails(updateErr.Error()))
+			return
+		}
+	}
+	writeAddMemberSuccess(c, user, member)
+}
+
+// RevokeInvitation godoc
+// @Summary      Kabul bekleyen daveti iptal et
+// @Description  Owner, hâlâ pending durumundaki bir daveti iptal eder; accepted/declined/revoked/expired durumundaki kayıtlar tekrar iptal edilemez.
+// @Tags         Alan Davetleri
+// @Produce      json
+// @Param        id      path  string  true  "Alan ID'si"
+// @Param        inv_id  path  string  true  "Davet ID'si"
+// @Success      200  {object}  map[string]interface{}
+// @Security     Bearer
+// @Router       /tenants/{id}/invitations/{inv_id} [delete]
+func (h *TenantInvitationHandler) RevokeInvitation(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantID, ok := parseTenantIDFromPath(c)
+	if !ok {
+		return
+	}
+	invID, ok := parseInvitationIDFromPath(c)
+	if !ok {
+		return
+	}
+
+	// Cross-check the invitation lives in the URL :id. The route layer
+	// already verifies the caller has Owner on the active tenant AND
+	// the URL :id matches the active tenant (PathTenantMatch), but the
+	// invitation row itself carries its own tenant_id we have to honour
+	// — otherwise an Owner of A could revoke invitations of B by URL-
+	// crafting against /tenants/A/invitations/<inv-of-B>.
+	inv, err := h.invitationService.GetByID(ctx, invID)
+	if err != nil {
+		logger.Errorf(ctx, "GetByID invitation failed: id=%d err=%v", invID, err)
+		c.Error(apperrors.NewInternalServerError("failed to load invitation").WithDetails(err.Error()))
+		return
+	}
+	if inv == nil {
+		c.Error(apperrors.NewNotFoundError("invitation not found"))
+		return
+	}
+	if inv.TenantID != tenantID {
+		// Render the same 404 as "missing" so we don't leak existence
+		// across tenants.
+		c.Error(apperrors.NewNotFoundError("invitation not found"))
+		return
+	}
+
+	if err := h.invitationService.Revoke(ctx, invID); err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvitationNotFound):
+			c.Error(apperrors.NewNotFoundError("invitation not found"))
+		case errors.Is(err, service.ErrInvitationNotPending):
+			c.Error(apperrors.NewConflictError(err.Error()))
+		default:
+			logger.Errorf(ctx, "RevokeInvitation failed: id=%d err=%v", invID, err)
+			c.Error(apperrors.NewInternalServerError("failed to revoke invitation").WithDetails(err.Error()))
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// ListMyInvitations godoc
+// @Summary      Kabul bekleyen davetlerimi listele
+// @Description  Mevcut oturum açmış kullanıcının kabul bekleyen davetlerini (varsayılan olarak yalnızca pending) döndürür; avatar girişi ve /invitations gelen kutusu sayfası için kullanılır.
+// @Tags         Davetlerim
+// @Produce      json
+// @Param        include_terminal  query  bool  false  "İşlenmiş / süresi dolmuş gibi son durumdaki kayıtlar dahil edilsin mi (varsayılan false)"
+// @Success      200  {object}  map[string]interface{}
+// @Security     Bearer
+// @Router       /me/invitations [get]
+func (h *TenantInvitationHandler) ListMyInvitations(c *gin.Context) {
+	ctx := c.Request.Context()
+	caller, ok := types.UserIDFromContext(ctx)
+	if !ok || caller == "" {
+		c.Error(apperrors.NewUnauthorizedError("caller user id missing from context"))
+		return
+	}
+	includeTerminal := strings.EqualFold(c.Query("include_terminal"), "true")
+
+	rows, err := h.invitationService.ListByInvitee(ctx, caller, includeTerminal)
+	if err != nil {
+		logger.Errorf(ctx, "ListByInvitee invitations failed: user=%s err=%v", caller, err)
+		c.Error(apperrors.NewInternalServerError("failed to list invitations").WithDetails(err.Error()))
+		return
+	}
+
+	usersByID := h.hydrateUsers(c, rows)
+	tenantsByID := h.hydrateTenants(c, rows)
+	resp := make([]types.TenantInvitationResponse, 0, len(rows))
+	for _, inv := range rows {
+		resp = append(resp, projectInvitation(inv, usersByID, tenantsByID))
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"invitations": resp,
+			"total":       len(resp),
+		},
+	})
+}
+
+// CountMyPendingInvitations godoc
+// @Summary      Bekleyen davetlerimin sayısını al
+// @Description  Hafif endpoint; mevcut oturum açmış kullanıcının pending davet sayısını döndürür, avatar yanındaki rozet için yoklamada kullanılır.
+// @Tags         Davetlerim
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Security     Bearer
+// @Router       /me/invitations/pending-count [get]
+func (h *TenantInvitationHandler) CountMyPendingInvitations(c *gin.Context) {
+	ctx := c.Request.Context()
+	caller, ok := types.UserIDFromContext(ctx)
+	if !ok || caller == "" {
+		c.Error(apperrors.NewUnauthorizedError("caller user id missing from context"))
+		return
+	}
+
+	count, err := h.invitationService.CountPendingByInvitee(ctx, caller)
+	if err != nil {
+		logger.Errorf(ctx, "CountPendingByInvitee failed: user=%s err=%v", caller, err)
+		c.Error(apperrors.NewInternalServerError("failed to count pending invitations").WithDetails(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    gin.H{"pending_count": count},
+	})
+}
+
+// AcceptMyInvitation godoc
+// @Summary      Daveti kabul et
+// @Description  Mevcut oturum açmış kullanıcı bir pending daveti kabul eder; sunucu aynı anda tenant_members kaydını da yazar.
+// @Tags         Davetlerim
+// @Produce      json
+// @Param        inv_id  path  string  true  "Davet ID'si"
+// @Success      200  {object}  map[string]interface{}
+// @Security     Bearer
+// @Router       /me/invitations/{inv_id}/accept [post]
+func (h *TenantInvitationHandler) AcceptMyInvitation(c *gin.Context) {
+	ctx := c.Request.Context()
+	caller, ok := types.UserIDFromContext(ctx)
+	if !ok || caller == "" {
+		c.Error(apperrors.NewUnauthorizedError("caller user id missing from context"))
+		return
+	}
+	invID, ok := parseInvitationIDFromPath(c)
+	if !ok {
+		return
+	}
+
+	member, err := h.invitationService.Accept(ctx, invID, caller)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvitationNotFound):
+			c.Error(apperrors.NewNotFoundError("invitation not found"))
+		case errors.Is(err, service.ErrInvitationForbidden):
+			c.Error(apperrors.NewForbiddenError(err.Error()))
+		case errors.Is(err, service.ErrInvitationNotPending):
+			c.Error(apperrors.NewConflictError(err.Error()))
+		case errors.Is(err, service.ErrInvitationExpired):
+			c.Error(apperrors.NewConflictError(err.Error()))
+		default:
+			logger.Errorf(ctx, "AcceptMyInvitation failed: id=%d user=%s err=%v",
+				invID, caller, err)
+			c.Error(apperrors.NewInternalServerError("failed to accept invitation").WithDetails(err.Error()))
+		}
+		return
+	}
+
+	// A tenantless account adopts the first accepted invitation as its
+	// default tenant. Membership remains the authorization source; TenantID
+	// only supplies the login/navigation default.
+	if user, userErr := h.userService.GetUserByID(ctx, caller); userErr == nil && user != nil && user.TenantID == 0 {
+		user.TenantID = member.TenantID
+		if updateErr := h.userService.UpdateUser(ctx, user); updateErr != nil {
+			logger.Errorf(ctx, "AcceptMyInvitation failed to set default tenant: user=%s tenant=%d err=%v",
+				caller, member.TenantID, updateErr)
+			c.Error(apperrors.NewInternalServerError("invitation accepted but default workspace update failed").WithDetails(updateErr.Error()))
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"membership": gin.H{
+				"tenant_id": member.TenantID,
+				"role":      member.Role,
+				"status":    member.Status,
+				"joined_at": member.JoinedAt,
+			},
+		},
+	})
+}
+
+// acceptInvitationByTokenRequest: POST /me/invitations/accept-by-token için istek gövdesi.
+// Oturum açmış kullanıcı token ile alana katılır (register-by-invite'tan farklı olarak yeni hesap oluşturmaz).
+type acceptInvitationByTokenRequest struct {
+	Token string `json:"token" binding:"required"`
+}
+
+// AcceptMyInvitationByToken godoc
+// @Summary      Paylaşılan bağlantı üzerinden alana katıl
+// @Description  Oturum açmış kullanıcı, paylaşılan davet bağlantısının token'ı ile alana katılır ve yeni hesap oluşturmaz; zaten üye olan kullanıcılar için idempotenttir.
+// @Tags         Davetlerim
+// @Accept       json
+// @Produce      json
+// @Param        request  body      acceptInvitationByTokenRequest  true  "Davet token'ı"
+// @Success      200      {object}  map[string]interface{}
+// @Failure      410      {object}  apperrors.AppError  "Bağlantı geçersiz veya iptal edilmiş"
+// @Security     Bearer
+// @Router       /me/invitations/accept-by-token [post]
+func (h *TenantInvitationHandler) AcceptMyInvitationByToken(c *gin.Context) {
+	ctx := c.Request.Context()
+	caller, ok := types.UserIDFromContext(ctx)
+	if !ok || caller == "" {
+		c.Error(apperrors.NewUnauthorizedError("caller user id missing from context"))
+		return
+	}
+
+	var req acceptInvitationByTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(apperrors.NewValidationError("token is required").WithDetails(err.Error()))
+		return
+	}
+	token := strings.TrimSpace(req.Token)
+	if token == "" {
+		c.Error(apperrors.NewValidationError("token is required"))
+		return
+	}
+
+	member, err := h.invitationService.AcceptByToken(ctx, token, caller)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvitationTokenInvalid):
+			// Geçersiz/süresi dolmuş/iptal edilmiş durumlarının tümü 410 döndürür (LookupInvitationByToken ile tutarlı).
+			c.Error(&apperrors.AppError{
+				Code:     apperrors.ErrNotFound,
+				Message:  "invitation link is invalid or has been revoked",
+				HTTPCode: http.StatusGone,
+			})
+		default:
+			logger.Errorf(ctx, "AcceptMyInvitationByToken failed: user=%s err=%v", caller, err)
+			c.Error(apperrors.NewInternalServerError("failed to accept invitation").WithDetails(err.Error()))
+		}
+		return
+	}
+
+	// Kiracısı olmayan kullanıcılar, katıldıkları ilk alanı varsayılan alan olarak ayarlar (AcceptMyInvitation ile aynı şekilde).
+	if user, userErr := h.userService.GetUserByID(ctx, caller); userErr == nil && user != nil && user.TenantID == 0 {
+		user.TenantID = member.TenantID
+		if updateErr := h.userService.UpdateUser(ctx, user); updateErr != nil {
+			logger.Errorf(ctx, "AcceptMyInvitationByToken failed to set default tenant: user=%s tenant=%d err=%v",
+				caller, member.TenantID, updateErr)
+			c.Error(apperrors.NewInternalServerError("invitation accepted but default workspace update failed").WithDetails(updateErr.Error()))
+			return
+		}
+	}
+
+	// Ön uçta alan görünümünü değiştirmek için kullanılır.
+	tenantName := ""
+	if tenant, terr := h.tenantService.GetTenantByID(ctx, member.TenantID); terr == nil && tenant != nil {
+		tenantName = tenant.Name
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"membership": gin.H{
+				"tenant_id": member.TenantID,
+				"role":      member.Role,
+				"status":    member.Status,
+				"joined_at": member.JoinedAt,
+			},
+			"tenant_name": tenantName,
+		},
+	})
+}
+
+// DeclineMyInvitation godoc
+// @Summary      Daveti reddet
+// @Description  Mevcut oturum açmış kullanıcı bir pending daveti reddeder; tenant_members satırı oluşturulmaz.
+// @Tags         Davetlerim
+// @Produce      json
+// @Param        inv_id  path  string  true  "Davet ID"
+// @Success      200  {object}  map[string]interface{}
+// @Security     Bearer
+// @Router       /me/invitations/{inv_id}/decline [post]
+func (h *TenantInvitationHandler) DeclineMyInvitation(c *gin.Context) {
+	ctx := c.Request.Context()
+	caller, ok := types.UserIDFromContext(ctx)
+	if !ok || caller == "" {
+		c.Error(apperrors.NewUnauthorizedError("caller user id missing from context"))
+		return
+	}
+	invID, ok := parseInvitationIDFromPath(c)
+	if !ok {
+		return
+	}
+
+	if err := h.invitationService.Decline(ctx, invID, caller); err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvitationNotFound):
+			c.Error(apperrors.NewNotFoundError("invitation not found"))
+		case errors.Is(err, service.ErrInvitationForbidden):
+			c.Error(apperrors.NewForbiddenError(err.Error()))
+		case errors.Is(err, service.ErrInvitationNotPending):
+			c.Error(apperrors.NewConflictError(err.Error()))
+		case errors.Is(err, service.ErrInvitationExpired):
+			c.Error(apperrors.NewConflictError(err.Error()))
+		default:
+			logger.Errorf(ctx, "DeclineMyInvitation failed: id=%d user=%s err=%v",
+				invID, caller, err)
+			c.Error(apperrors.NewInternalServerError("failed to decline invitation").WithDetails(err.Error()))
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}

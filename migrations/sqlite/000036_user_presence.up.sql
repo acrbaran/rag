@@ -1,0 +1,2 @@
+ALTER TABLE users ADD COLUMN last_seen_at DATETIME;
+ALTER TABLE users ADD COLUMN online_since DATETIME;

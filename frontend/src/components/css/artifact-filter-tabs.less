@@ -1,0 +1,42 @@
+.artifact-filter-tabs() {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  height: 36px;
+  padding: 0;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--td-text-color-primary) 5%, transparent);
+
+  button {
+    height: 36px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--td-text-color-secondary);
+    font: inherit;
+    font-family: var(--app-font-family);
+    font-size: var(--app-text-chip);
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition: background var(--app-motion-fast) ease, color var(--app-motion-fast) ease, box-shadow var(--app-motion-fast) ease;
+
+    &:hover {
+      color: var(--td-text-color-primary);
+    }
+
+    &[aria-selected='true'],
+    &[aria-pressed='true'] {
+      background: var(--td-bg-color-container);
+      color: var(--td-text-color-primary);
+      box-shadow: var(--app-composer-shadow);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--td-brand-color);
+      outline-offset: 2px;
+    }
+  }
+}

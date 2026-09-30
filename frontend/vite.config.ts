@@ -1,0 +1,197 @@
+import { fileURLToPath, URL } from 'node:url'
+import { resolve, dirname } from 'node:path'
+import { existsSync } from 'node:fs'
+import { execSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { defineConfig, type Plugin } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import vueJsx from '@vitejs/plugin-vue-jsx'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const require = createRequire(import.meta.url)
+
+const pkg = require('./package.json') as { version?: string }
+const FRONTEND_VERSION = pkg.version ?? 'unknown'
+
+function resolveFrontendCommit(): string {
+  const fromEnv = process.env.VITE_FRONTEND_COMMIT || process.env.GITHUB_SHA
+  if (fromEnv) {
+    return fromEnv.slice(0, 7)
+  }
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim()
+  } catch {
+    return 'unknown'
+  }
+}
+
+const FRONTEND_COMMIT = resolveFrontendCommit()
+
+/** Dev parity with nginx: serve embed.html for /embed/:channelId (not the main SPA). */
+function embedHtmlDevFallback(): Plugin {
+  return {
+    name: 'embed-html-dev-fallback',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const raw = req.url ?? ''
+        const qIdx = raw.indexOf('?')
+        const path = qIdx >= 0 ? raw.slice(0, qIdx) : raw
+        const qs = qIdx >= 0 ? raw.slice(qIdx) : ''
+        if (path.startsWith('/embed/') && path !== '/embed.html' && !path.includes('.')) {
+          req.url = `/embed.html${qs}`
+        }
+        next()
+      })
+    },
+  }
+}
+const DEV_PROXY_TARGET =
+  process.env.VITE_DEV_PROXY_TARGET ||
+  process.env.FRONTEND_BACKEND_URL ||
+  'http://localhost:8080'
+
+function resolveVueOfficePptxEntry(): string {
+  try {
+    const pkgDir = dirname(require.resolve('@vue-office/pptx/package.json'))
+    const candidates = [
+      resolve(pkgDir, 'lib/v3/index.js'),
+      resolve(pkgDir, 'lib/index.js'),
+      resolve(pkgDir, 'lib/v3/vue-office-pptx.mjs'),
+    ]
+    const matched = candidates.find((candidate) => existsSync(candidate))
+    return matched ?? '@vue-office/pptx'
+  } catch {
+    return '@vue-office/pptx'
+  }
+}
+
+export default defineConfig({
+  define: {
+    __FRONTEND_VERSION__: JSON.stringify(FRONTEND_VERSION),
+    __FRONTEND_COMMIT__: JSON.stringify(FRONTEND_COMMIT),
+  },
+  css: {
+    // Less worker'ları ana iş parçacığından 5 sn içinde yanıt alamazsa "[less] timed-out"
+    // hatasıyla derlemeyi düşürüyor; yüklü Docker/CI makinelerinde bu rastgele oluyor.
+    // Ana iş parçacığında derlemek biraz yavaş ama deterministik.
+    preprocessorMaxWorkers: 0,
+  },
+  build: {
+    modulePreload: {
+      resolveDependencies(_filename, deps, { hostId }) {
+        // Embed iframe bootstraps with token exchange only; defer heavy chat chunks.
+        if (hostId?.includes('embed')) {
+          return deps.filter((dep) => !(
+            dep.includes('vendor-mermaid')
+            || dep.includes('vendor-highlight')
+            || dep.includes('vendor-markdown')
+            || dep.includes('vendor-tdesign')
+            || dep.includes('botmsg')
+            || dep.includes('usermsg')
+            || dep.includes('EmbedBotMessage')
+            || dep.includes('EmbedUserMessage')
+            || dep.includes('AgentStreamDisplay')
+            || dep.includes('EmbedChatCore')
+            || dep.includes('vendor-markdown')
+            || dep.includes('fonts-')
+          ))
+        }
+        return deps
+      },
+    },
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        embed: resolve(__dirname, 'embed.html'),
+      },
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('mermaid') || id.includes('/dagre') || id.includes('cytoscape')) {
+            return 'vendor-mermaid'
+          }
+          if (id.includes('marked') || id.includes('katex')) {
+            return 'vendor-markdown'
+          }
+          if (id.includes('highlight.js')) {
+            return 'vendor-highlight'
+          }
+        },
+      },
+    },
+  },
+  plugins: [
+    vue(),
+    vueJsx(),
+    embedHtmlDevFallback(),
+  ],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@vue-office/pptx': resolveVueOfficePptxEntry(),
+    },
+  },
+  server: {
+    port: 5174,
+    host: true,
+    // Geliştirme ortamı için proxy yapılandırması
+    proxy: {
+      '/mcp/': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
+        // Streamable HTTP may keep an SSE response open for long-running tools.
+        timeout: 3_600_000,
+        proxyTimeout: 3_600_000,
+      },
+      '/api': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
+        // Korumalı alan terminali gibi WebSocket yükseltme istekleri de /api üzerinden geçer; WS yönlendirmesi mutlaka etkinleştirilmelidir,
+        // aksi takdirde tarayıcı tarafındaki el sıkışma başarısız olur ve ön uçta "sürekli bağlanıyor" olarak görünür.
+        ws: true,
+        // Cube fork snapshots pause a live MicroVM; 30s axios/proxy defaults
+        // abort the POST and the backend then 500s on a canceled persist.
+        timeout: 180_000,
+        proxyTimeout: 180_000,
+      },
+      '/files': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
+      }
+    }
+  },
+  // `vite preview`, üretim derleme çıktısını (dist) kullanarak yerelde hizmet başlatır; release imajına en yakın ortamdır:
+  // Aynı sıkıştırma / paket bölme / CSS yükleme sırası, yalnızca üretim derlemesinde ortaya çıkan sorunları önceden açığa çıkarabilir
+  // (ör. tema değişkenlerinin paketleme sırası nedeniyle üzerine yazılması). Kullanım: npm run build && npm run preview
+  preview: {
+    port: 4173,
+    host: true,
+    proxy: {
+      '/mcp/': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
+        timeout: 3_600_000,
+        proxyTimeout: 3_600_000,
+      },
+      '/api': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
+        ws: true,
+        timeout: 180_000,
+        proxyTimeout: 180_000,
+      },
+      '/files': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
+      }
+    }
+  }
+})

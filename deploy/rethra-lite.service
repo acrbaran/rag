@@ -1,0 +1,23 @@
+[Unit]
+Description=Rethra Lite - Knowledge Base Management System
+After=network.target
+
+[Service]
+Type=simple
+User=rethra
+Group=rethra
+WorkingDirectory=/opt/rethra
+EnvironmentFile=/opt/rethra/.env.lite
+ExecStart=/opt/rethra/Rethra-lite
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/rethra/data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,149 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"sort"
+
+	apperrors "github.com/acrbaran/rag/internal/errors"
+	"github.com/acrbaran/rag/internal/types"
+)
+
+func sortedFAQIDs[V any](values map[int64]V) []int64 {
+	ids := make([]int64, 0, len(values))
+	for id := range values {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return ids
+}
+
+// loadFAQWriteChunks validates the entire selection before the first mutation.
+// Copies keep planning from mutating repository-owned snapshots on rejection.
+func (s *knowledgeService) loadFAQWriteChunks(
+	ctx context.Context,
+	kb *types.KnowledgeBase,
+	ids []int64,
+) (map[int64]*types.Chunk, error) {
+	wanted := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return nil, apperrors.NewBadRequestError(types.LocalizedText(ctx, "SSS kaydı kimliği pozitif tam sayı olmalıdır", "FAQ entry ID must be a positive integer"))
+		}
+		wanted[id] = true
+	}
+	result := make(map[int64]*types.Chunk, len(wanted))
+	if len(wanted) == 0 {
+		return result, nil
+	}
+	chunks, err := s.chunkRepo.ListChunksBySeqID(ctx, kb.TenantID, sortedFAQIDs(wanted))
+	if err != nil {
+		return nil, err
+	}
+	for _, chunk := range chunks {
+		if chunk == nil || !wanted[chunk.SeqID] {
+			continue
+		}
+		if chunk.TenantID != kb.TenantID || chunk.KnowledgeBaseID != kb.ID || chunk.ChunkType != types.ChunkTypeFAQ {
+			return nil, apperrors.NewForbiddenError(types.LocalizedText(ctx, "SSS kaydı bu bilgi tabanına ait değil", "FAQ entry does not belong to this knowledge base"))
+		}
+		snapshot := *chunk
+		result[chunk.SeqID] = &snapshot
+	}
+	if len(result) != len(wanted) {
+		return nil, apperrors.NewNotFoundError(types.LocalizedText(ctx, "SSS kaydı bulunamadı", "FAQ entry not found"))
+	}
+	return result, nil
+}
+
+type faqFieldPlan struct {
+	chunks     map[int64]*types.Chunk
+	chunksByID map[string]*types.Chunk
+	tags       map[int64]*types.KnowledgeTag
+	excludeIDs []string
+}
+
+func (s *knowledgeService) planFAQFields(
+	ctx context.Context,
+	kb *types.KnowledgeBase,
+	req *types.FAQEntryFieldsBatchUpdate,
+) (*faqFieldPlan, error) {
+	ids := append(sortedFAQIDs(req.ByID), req.ExcludeIDs...)
+	chunks, err := s.loadFAQWriteChunks(ctx, kb, ids)
+	if err != nil {
+		return nil, err
+	}
+	plan := &faqFieldPlan{
+		chunks:     chunks,
+		chunksByID: make(map[string]*types.Chunk),
+		tags:       make(map[int64]*types.KnowledgeTag),
+	}
+	for _, chunk := range chunks {
+		plan.chunksByID[chunk.ID] = chunk
+	}
+	for _, id := range req.ExcludeIDs {
+		plan.excludeIDs = append(plan.excludeIDs, chunks[id].ID)
+	}
+	tagIDs := make(map[int64]bool)
+	for id := range req.ByTag {
+		if id <= 0 {
+			return nil, apperrors.NewBadRequestError(types.LocalizedText(ctx, "Etiket kimliği pozitif tam sayı olmalıdır", "Tag ID must be a positive integer"))
+		}
+		tagIDs[id] = true
+	}
+	for _, updates := range []map[int64]types.FAQEntryFieldsUpdate{req.ByTag, req.ByID} {
+		for _, update := range updates {
+			if update.TagID != nil && *update.TagID > 0 {
+				tagIDs[*update.TagID] = true
+			}
+		}
+	}
+	if len(tagIDs) > 0 {
+		tags, err := s.tagRepo.GetBySeqIDs(ctx, kb.TenantID, sortedFAQIDs(tagIDs))
+		if err != nil {
+			return nil, err
+		}
+		for _, tag := range tags {
+			if tag == nil || !tagIDs[tag.SeqID] {
+				continue
+			}
+			if err := validateFAQTagScope(ctx, tag, kb.TenantID, kb.ID); err != nil {
+				return nil, err
+			}
+			plan.tags[tag.SeqID] = tag
+		}
+		for _, id := range sortedFAQIDs(tagIDs) {
+			if plan.tags[id] == nil {
+				return nil, apperrors.NewNotFoundError(fmt.Sprintf(types.LocalizedText(ctx, "Etiket %d bulunamadı", "Tag %d not found"), id))
+			}
+		}
+	}
+	return plan, nil
+}
+
+func validateFAQTagScope(ctx context.Context, tag *types.KnowledgeTag, tenantID uint64, kbID string) error {
+	if tag == nil {
+		return apperrors.NewNotFoundError(types.LocalizedText(ctx, "Etiket bulunamadı", "Tag not found"))
+	}
+	if tag.TenantID != tenantID || tag.KnowledgeBaseID != kbID {
+		return apperrors.NewForbiddenError(types.LocalizedText(ctx, "Etiket bu bilgi tabanına ait değil", "Tag does not belong to this knowledge base"))
+	}
+	return nil
+}
+
+func (s *knowledgeService) validateFAQImportTags(
+	ctx context.Context,
+	kb *types.KnowledgeBase,
+	entries []types.FAQEntryPayload,
+) error {
+	// Import still reports per-entry content validation failures. Referenced
+	// resources must all be in scope before admission or execution, however.
+	req := &types.FAQEntryFieldsBatchUpdate{ByTag: make(map[int64]types.FAQEntryFieldsUpdate)}
+	for _, entry := range entries {
+		if entry.TagID != 0 {
+			req.ByTag[entry.TagID] = types.FAQEntryFieldsUpdate{}
+		}
+	}
+	_, err := s.planFAQFields(ctx, kb, req)
+	return err
+}

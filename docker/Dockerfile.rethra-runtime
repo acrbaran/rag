@@ -1,0 +1,5 @@
+FROM rethra-app:latest
+COPY --from=rethra-builder:local /app/Rethra /app/Rethra
+COPY --from=rethra-builder:local /app/scripts /app/scripts
+COPY --from=rethra-builder:local /app/migrations /app/migrations
+CMD ["./Rethra"]

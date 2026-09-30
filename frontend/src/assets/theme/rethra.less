@@ -1,0 +1,1394 @@
+// Rethra bileşen katmanı: rag-platform/frontend (shadcn) görünümünü TDesign bileşenlerine taşır.
+// Tüm değerler theme.css içindeki --app-* / --td-* token'larından gelir.
+
+@font-face {
+  font-family: 'Hellix';
+  src: url('@/assets/fonts/Hellix-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Hellix';
+  src: url('@/assets/fonts/Hellix-Medium.woff') format('woff');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Hellix';
+  src:
+    url('@/assets/fonts/Hellix-SemiBold.woff2') format('woff2'),
+    url('@/assets/fonts/Hellix-SemiBold.woff') format('woff');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Fira Code';
+  src: url('@/assets/fonts/FiraCode-VariableFont_wght.ttf') format('truetype-variations');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --td-comp-size-m: var(--app-control-height);
+  --td-comp-size-l: var(--app-control-height-lg);
+  --td-comp-size-s: var(--app-control-height-sm);
+  --td-font-size-body-medium: var(--app-text-base);
+  --td-font-family-medium: var(--app-font-family);
+}
+
+body {
+  font-family: var(--app-font-family);
+  font-feature-settings: 'cv11', 'ss01';
+  letter-spacing: 0;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--td-brand-color) 22%, transparent);
+}
+
+// ---------- Başlıklar: Hellix, 500 ----------
+h1,
+h2,
+h3,
+.t-dialog__header,
+.t-drawer__header,
+.t-card__title,
+.page-title,
+.section-title,
+.settings-title {
+  font-family: var(--app-font-heading);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+// ---------- Butonlar ----------
+.t-button {
+  border-radius: var(--app-radius-pill);
+  font-weight: 500;
+  transition:
+    background-color var(--app-motion-fast) ease,
+    border-color var(--app-motion-fast) ease,
+    color var(--app-motion-fast) ease,
+    opacity var(--app-motion-fast) ease;
+}
+
+.t-button.t-size-m:not(.t-button--shape-square):not(.t-button--shape-circle) {
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+.t-button--variant-base.t-button--theme-primary {
+  background-color: var(--td-brand-color);
+  border-color: var(--td-brand-color);
+}
+.t-button--variant-base.t-button--theme-primary:hover:not(.t-is-disabled):not(.t-is-loading),
+.t-button--variant-base.t-button--theme-primary:focus-visible {
+  background-color: color-mix(in srgb, var(--td-brand-color) 82%, var(--td-bg-color-container));
+  border-color: transparent;
+}
+
+.t-button--variant-base.t-button--theme-default {
+  background-color: var(--td-bg-color-component);
+  border-color: transparent;
+  color: var(--td-text-color-primary);
+}
+.t-button--variant-base.t-button--theme-default:hover:not(.t-is-disabled) {
+  background-color: var(--td-bg-color-component-hover);
+  border-color: transparent;
+}
+
+.t-button--variant-outline.t-button--theme-default {
+  background-color: var(--td-bg-color-container);
+  border-color: var(--td-component-stroke);
+  color: var(--td-text-color-primary);
+}
+.t-button--variant-outline.t-button--theme-default:hover:not(.t-is-disabled),
+.t-button--variant-outline.t-button--theme-default:focus-visible {
+  background-color: var(--app-nav-hover);
+  border-color: var(--td-component-stroke);
+  color: var(--td-text-color-primary);
+}
+
+.t-button--variant-text.t-button--theme-default:hover:not(.t-is-disabled),
+.t-button--variant-text.t-button--theme-default:focus-visible {
+  background-color: var(--app-nav-hover);
+  border-color: transparent;
+  color: var(--td-text-color-primary);
+}
+
+.t-button--variant-base.t-button--theme-danger {
+  background-color: color-mix(in srgb, var(--td-error-color) 10%, transparent);
+  border-color: transparent;
+  color: var(--td-error-color);
+}
+.t-button--variant-base.t-button--theme-danger:hover:not(.t-is-disabled) {
+  background-color: color-mix(in srgb, var(--td-error-color) 18%, transparent);
+  border-color: transparent;
+  color: var(--td-error-color);
+}
+
+// ---------- Girdi alanları ----------
+.t-input,
+.t-select .t-input,
+.t-input-number .t-input,
+.t-tag-input .t-input,
+.t-date-picker .t-input {
+  border-radius: var(--app-radius-pill);
+  border-color: var(--td-component-stroke);
+  background-color: var(--td-bg-color-specialcomponent);
+  padding-left: 14px;
+  padding-right: 12px;
+}
+
+// TDesign sizes the calendar's month/year selects (80px/78px) for its square
+// inputs; the pill padding above leaves no room for the label, so widen them.
+.t-date-picker__header-controller .t-date-picker__header-controller-month {
+  width: 100px;
+}
+
+.t-date-picker__header-controller .t-date-picker__header-controller-year {
+  width: 104px;
+}
+
+// Year/month/quarter panels hide the month select and give the year 130px.
+.t-date-picker__panel-year,
+.t-date-picker__panel-month,
+.t-date-picker__panel-quarter {
+  .t-date-picker__header-controller .t-date-picker__header-controller-year {
+    width: 130px;
+  }
+}
+
+.t-input:hover:not(.t-is-disabled):not(.t-is-error) {
+  border-color: var(--app-ring-soft);
+}
+
+.t-input:focus:not(.t-is-disabled):not(.t-is-error):not(.t-is-warning):not(.t-is-success),
+.t-input--focused:not(.t-is-error):not(.t-is-warning):not(.t-is-success),
+.t-textarea__inner:focus:not(.t-is-disabled):not(.t-is-error),
+.t-textarea__inner.t-is-focused:not(.t-is-disabled):not(.t-is-error) {
+  border-color: var(--app-ring-soft);
+  box-shadow: none;
+}
+
+.t-textarea__inner {
+  border-radius: var(--app-radius-md);
+  border-color: var(--td-component-stroke);
+  padding: 10px 14px;
+  line-height: 1.5;
+}
+.t-textarea__inner:hover:not(.t-is-disabled) {
+  border-color: var(--app-ring-soft);
+}
+
+.t-input-number .t-input-number__decrease,
+.t-input-number .t-input-number__increase {
+  border-radius: var(--app-radius-pill);
+}
+
+// ---------- Onay kutusu / radyo / anahtar ----------
+.t-checkbox__input {
+  border-radius: var(--app-radius-xs);
+}
+
+.t-radio-group.t-radio-group--filled {
+  border-radius: var(--app-radius-pill);
+  background-color: var(--app-surface-muted);
+  padding: 3px;
+}
+.t-radio-group.t-radio-group--filled .t-radio-button,
+.t-radio-group.t-radio-group--filled .t-radio-group__bg-block {
+  border-radius: var(--app-radius-pill);
+}
+
+.t-radio-group .t-radio-button:first-child {
+  border-top-left-radius: var(--app-radius-pill);
+  border-bottom-left-radius: var(--app-radius-pill);
+}
+.t-radio-group .t-radio-button:last-child {
+  border-top-right-radius: var(--app-radius-pill);
+  border-bottom-right-radius: var(--app-radius-pill);
+}
+
+// ---------- Etiketler ----------
+.t-tag {
+  border-radius: var(--app-radius-pill);
+  font-weight: 500;
+}
+.t-tag.t-tag--light.t-tag--default,
+.t-tag.t-tag--dark.t-tag--default {
+  background-color: var(--app-surface-muted);
+  color: var(--td-text-color-primary);
+}
+
+// ---------- Sekmeler ----------
+.t-tabs__nav-item-text-wrapper {
+  font-weight: 500;
+}
+.t-tabs__nav-item:not(.t-is-active):not(.t-is-disabled):hover .t-tabs__nav-item-wrapper {
+  background-color: var(--app-nav-hover);
+}
+.t-tabs__nav-item-wrapper {
+  border-radius: var(--app-radius-pill);
+}
+
+// ---------- Menü ve açılır listeler ----------
+.t-popup__content {
+  border-radius: var(--app-radius-xl);
+  border: 1px solid var(--td-component-stroke);
+  box-shadow: var(--app-popover-shadow);
+}
+.t-popup__content .t-popup__arrow {
+  display: none;
+}
+
+.t-select__dropdown-inner,
+.t-dropdown__menu {
+  padding: 6px;
+}
+
+.t-select-option,
+.t-dropdown__item {
+  border-radius: var(--app-radius-sm);
+  min-height: 32px;
+}
+.t-select-option:hover:not(.t-is-disabled):not(.t-is-selected),
+.t-dropdown__item:hover:not(.t-is-disabled) {
+  background-color: var(--app-nav-hover);
+}
+
+.t-tooltip .t-popup__content {
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+  box-shadow: none;
+}
+
+// ---------- Diyaloglar ve çekmeceler ----------
+.t-dialog__mask,
+.t-drawer__mask {
+  background: var(--app-overlay);
+}
+
+.t-dialog {
+  border-radius: var(--app-radius-2xl);
+  border: 1px solid var(--td-component-stroke);
+  box-shadow: var(--td-shadow-3);
+}
+
+.t-dialog__header {
+  font-size: var(--app-text-3xl);
+  line-height: 1.3;
+}
+
+.t-dialog__close,
+.t-drawer__close-btn {
+  border-radius: var(--app-radius-pill);
+}
+.t-dialog__close:hover,
+.t-drawer__close-btn:hover {
+  background-color: var(--app-nav-hover);
+}
+
+.t-drawer__content-wrapper {
+  box-shadow: var(--td-shadow-3);
+}
+.t-drawer__header {
+  font-size: var(--app-text-2xl);
+  border-bottom-color: transparent;
+}
+.t-drawer__footer {
+  border-top-color: transparent;
+}
+
+// ---------- Kartlar, tablolar, form ----------
+.t-card {
+  border-radius: var(--app-radius-2xl);
+}
+.t-card--bordered {
+  border-color: var(--td-component-stroke);
+}
+
+.t-table {
+  border-radius: var(--app-radius-lg);
+}
+.t-table__header > tr > th {
+  font-weight: 500;
+  color: var(--td-text-color-secondary);
+  background-color: var(--app-surface-muted);
+}
+
+.t-form__label {
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+
+// ---------- Bildirimler ----------
+.t-message,
+.t-notification {
+  width: min(356px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  padding: 12px 18px;
+  align-items: flex-start;
+  gap: 10px;
+  border: 0;
+  border-radius: var(--app-radius-token);
+  background: var(--td-bg-color-container);
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.16);
+  color: var(--td-text-color-primary);
+  font-size: var(--app-text-md);
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.t-message__list {
+  top: 12px !important;
+  right: 12px !important;
+  left: auto !important;
+  transform: none !important;
+}
+
+.t-message__list .t-message {
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+
+.t-message {
+  align-items: center;
+}
+
+.t-message > .t-icon,
+.t-message > [data-t-icon] > .t-icon,
+.t-message .t-loading,
+.t-notification__icon,
+.t-notification__icon .t-icon {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.t-notification__icon {
+  display: flex;
+  align-items: center;
+  font-size: var(--app-text-md);
+  height: 1.4em;
+}
+
+.t-notification__main { min-width: 0; }
+.t-notification__title { font-size: var(--app-text-md); font-weight: 600; line-height: 1.4; }
+.t-notification__content { margin-top: 4px; font-size: var(--app-text-md); line-height: 1.4; word-break: break-word; }
+.t-notification .t-message__close { margin-left: 12px; cursor: pointer; }
+.t-notification__show--top-right { right: 12px !important; top: 12px !important; }
+
+body:has(.chat-topbar) .t-message__list,
+body:has(.chat-topbar) .t-notification__show--top-right { top: 52px !important; }
+
+@media (max-width: 640px) {
+  .t-message__list { right: 16px !important; }
+  .t-notification__show--top-right { right: 16px !important; }
+}
+
+.t-alert {
+  // İkon kutusu ile metnin ilk satırı aynı yükseklikte olsun; özel boyutlu
+  // uyarılar (ör. .compact-alert) yalnızca bu değişkeni ezer.
+  --alert-line-height: var(--td-line-height-body-medium);
+  border-radius: var(--app-radius-lg);
+}
+
+// TDesign ikonu satır yüksekliğinden farklı bir kutuda üste yaslıyor; ikonu
+// metnin ilk satırıyla aynı yükseklikte bir kutunun ortasına al.
+.t-alert__icon {
+  display: flex;
+  align-items: center;
+  height: var(--alert-line-height);
+  line-height: 1;
+}
+
+.t-alert__title,
+.t-alert__description {
+  line-height: var(--alert-line-height);
+}
+
+// Uyarı içindeki aksiyon butonu (Tekrar dene vb.) metnin hemen yanında değil,
+// satırın en sağında dursun.
+.t-alert__message {
+  align-items: center;
+  gap: 16px;
+}
+
+.t-alert__operation {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  padding: 0;
+}
+
+// Buton metin satırından yüksek; ikon, metin ve buton ortak eksende dursun.
+.t-alert:has(.t-alert__operation) {
+  align-items: center;
+
+  .t-alert__icon {
+    align-self: center;
+  }
+}
+
+// ---------- Kaydırma çubuğu ----------
+*::-webkit-scrollbar-thumb {
+  border-radius: var(--app-radius-pill);
+}
+
+
+// ============================================================
+// Birebir eşleşme katmanı (rag-platform/frontend shadcn ölçüleri)
+// ============================================================
+html,
+body {
+  background-color: var(--td-bg-color-page);
+  color: var(--td-text-color-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-size: var(--app-text-lg);
+  line-height: 24px;
+}
+
+button,
+input,
+textarea,
+select,
+optgroup {
+  font-family: inherit;
+  font-feature-settings: inherit;
+}
+
+h1,
+h2,
+h3,
+.t-dialog__header,
+.t-dialog__header-content,
+.t-drawer__header {
+  font-family: var(--app-font-heading) !important;
+  font-weight: 500 !important;
+}
+
+// Sayfa başlığı: text-ui-34 (31.875px) / leading 1.04 / -0.028em
+.page-title,
+.rethra-page-title {
+  font-size: var(--app-text-page-title) !important;
+  line-height: 1.04 !important;
+  letter-spacing: -0.028em !important;
+  font-weight: 500 !important;
+}
+
+// ---------- Button: rounded-full text-sm font-medium ----------
+.t-button {
+  font-family: var(--app-font-family);
+  font-size: var(--app-text-base);
+  font-weight: 500;
+  line-height: 19.6875px;
+  letter-spacing: 0;
+  border-radius: var(--app-radius-pill);
+  box-shadow: none !important;
+  gap: 6px;
+}
+.t-button.t-size-s,
+.t-button.t-size-m,
+.t-button.t-size-l {
+  font-family: var(--app-font-family);
+  font-weight: 500;
+  line-height: 19.6875px;
+}
+.t-button.t-size-m {
+  height: 36px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.t-button.t-size-s {
+  height: 32px;
+  padding-left: 12px;
+  padding-right: 12px;
+  font-size: var(--app-text-base);
+}
+.t-button.t-size-l {
+  height: 40px;
+  padding-left: 16px;
+  padding-right: 16px;
+  font-size: var(--app-text-base);
+}
+.t-button.t-size-m.t-button--shape-square,
+.t-button.t-size-m.t-button--shape-circle {
+  width: 36px;
+  padding: 0;
+}
+.t-button.t-size-s.t-button--shape-square,
+.t-button.t-size-s.t-button--shape-circle {
+  width: 32px;
+  padding: 0;
+}
+.t-button .t-button__text {
+  font-weight: inherit;
+}.t-button--variant-base.t-button--theme-primary:hover:not(.t-is-disabled):not(.t-is-loading) {
+  background-color: color-mix(in srgb, var(--td-brand-color) 80%, transparent);
+  border-color: transparent;
+}
+.t-button--variant-outline.t-button--theme-default {
+  background-color: var(--td-bg-color-page);
+  border-color: var(--td-component-stroke);
+}
+.t-button--variant-outline.t-button--theme-default:hover:not(.t-is-disabled) {
+  background-color: color-mix(in srgb, var(--td-bg-color-container-active) 50%, transparent);
+  border-color: var(--td-component-stroke);
+}
+.t-button--variant-text.t-button--theme-default:hover:not(.t-is-disabled) {
+  background-color: var(--td-bg-color-secondarycontainer);
+}
+
+// ---------- Input: h-9 rounded-full px-3.5 text-sm ----------
+.t-input {
+  height: 36px;
+  border-radius: var(--app-radius-pill);
+  padding-left: 14px;
+  padding-right: 14px;
+  font-size: var(--app-text-base);
+  background-color: var(--td-bg-color-page);
+  border-color: var(--td-component-stroke);
+  box-shadow: none !important;
+}
+.t-size-s .t-input,
+.t-input.t-size-s {
+  height: 32px;
+}
+// SelectTrigger bg-background: readonly select girdileri de aynı dolguyu alır.
+.t-input.t-is-readonly:not(.t-is-disabled),
+.t-select .t-input:not(.t-is-disabled) {
+  background-color: var(--td-bg-color-page);
+}
+.t-size-l .t-input,
+.t-input.t-size-l {
+  height: 40px;
+}
+.t-input__inner,
+.t-textarea__inner,
+.t-select__input,
+.t-tag-input .t-input__inner {
+  font-family: var(--app-font-family);
+  font-size: var(--app-text-base);
+  color: var(--td-text-color-primary);
+}
+.t-input__inner::placeholder,
+.t-textarea__inner::placeholder {
+  color: var(--td-text-color-secondary);
+}
+.t-input--focused,
+.t-input:focus-within {
+  border-color: var(--app-ring-select) !important;
+  box-shadow: none !important;
+}
+.t-textarea__inner {
+  border-radius: var(--app-radius-token);
+  background-color: var(--td-bg-color-page);
+  font-size: var(--app-text-base);
+  padding: 8px 14px;
+}
+.t-textarea__inner:focus,
+.t-textarea__inner.t-is-focused {
+  border-color: var(--app-ring-select) !important;
+  box-shadow: none !important;
+}
+
+// ---------- Badge: h-5 rounded-4xl px-2 text-xs font-medium ----------
+.t-tag {
+  height: 20px;
+  padding: 2px 8px;
+  border-radius: var(--app-radius-token-4xl);
+  font-size: var(--app-text-xs);
+  font-weight: 500;
+  line-height: 16px;
+  border: 1px solid transparent;
+  gap: 4px;
+}
+.t-tag.t-size-s {
+  height: 18px;
+  padding: 0 6px;
+}
+.t-tag.t-size-l {
+  height: 24px;
+  padding: 2px 10px;
+}
+.t-tag--light.t-tag--primary,
+.t-tag--light.t-tag--success {
+  background-color: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
+  border-color: color-mix(in srgb, var(--td-brand-color) 30%, transparent);
+  color: var(--td-brand-color-7);
+}
+.t-tag--light.t-tag--warning {
+  background-color: color-mix(in srgb, oklch(0.769 0.188 70.08) 10%, transparent);
+  border-color: color-mix(in srgb, oklch(0.769 0.188 70.08) 30%, transparent);
+  color: oklch(0.473 0.137 46.2);
+}
+.t-tag--light.t-tag--danger {
+  background-color: color-mix(in srgb, var(--td-error-color) 10%, transparent);
+  border-color: color-mix(in srgb, var(--td-error-color) 30%, transparent);
+  color: var(--td-error-color);
+}
+.t-tag--outline {
+  border-color: var(--td-component-stroke);
+  background-color: color-mix(in srgb, var(--td-component-stroke) 30%, transparent);
+  color: var(--td-text-color-primary);
+}
+
+// ---------- Segmented (hub-tab-toggle) ----------
+.t-radio-group.t-radio-group--filled,
+.t-radio-group.t-radio-group--outline:has(.t-radio-button) {
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background-color: color-mix(in srgb, var(--td-text-color-primary) 5%, transparent);
+}
+.t-radio-group.t-size-s.t-radio-group--filled {
+  height: 32px;
+}
+.t-radio-group--filled .t-radio-group__bg-block {
+  top: 0 !important;
+  height: 100% !important;
+  border-radius: var(--app-radius-pill);
+  background-color: var(--td-bg-color-page);
+  box-shadow: var(--app-composer-shadow);
+}
+.t-radio-group .t-radio-button {
+  height: 100%;
+  padding: 0 12px;
+  border: 0 !important;
+  border-radius: var(--app-radius-pill) !important;
+  background: transparent;
+  font-size: var(--app-text-chip);
+  font-weight: 500;
+  color: var(--td-text-color-secondary);
+}
+.t-radio-group .t-radio-button::before {
+  display: none !important;
+}
+.t-radio-group .t-radio-button:hover,
+.t-radio-group .t-radio-button.t-is-checked {
+  color: var(--td-text-color-primary) !important;
+}
+
+// ---------- Tabs: rounded-4xl p-[3px] h-9 ----------
+.t-tabs__nav-item-text-wrapper {
+  font-size: var(--app-text-base);
+  font-weight: 500;
+}
+
+// ---------- Checkbox ----------
+.t-checkbox__input {
+  border-radius: var(--app-radius-2xs);
+  border-color: var(--td-component-stroke);
+}
+.t-checkbox__label,
+.t-radio__label {
+  font-size: var(--app-text-base);
+}
+
+// ---------- Dialog: rounded-4xl px-7 pt-8 pb-7 ring-1 foreground/5 ----------
+.t-dialog {
+  border-radius: var(--app-radius-token-4xl);
+  border: 0;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--td-text-color-primary) 5%, transparent) !important;
+  padding: 32px 28px 28px;
+  background-color: var(--td-bg-color-container);
+  font-size: var(--app-text-base);
+}
+.t-dialog__header {
+  font-size: var(--app-text-xl) !important;
+  line-height: 1 !important;
+  letter-spacing: 0;
+  padding: 0;
+  min-height: 0;
+}
+.t-dialog__body {
+  font-size: var(--app-text-base);
+  color: var(--td-text-color-secondary);
+  padding: 24px 0 0;
+}
+.t-dialog__footer {
+  padding: 24px 0 0;
+}
+.t-dialog__close {
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.t-dialog__mask,
+.t-drawer__mask {
+  background: var(--app-overlay);
+  backdrop-filter: blur(2px);
+}
+
+// ---------- Card: rounded-4xl ring-1 foreground/10 py-6 ----------
+.t-card {
+  border-radius: var(--app-radius-token-4xl);
+  border: 0 !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--td-text-color-primary) 10%, transparent) !important;
+  font-size: var(--app-text-base);
+}
+.t-card__title {
+  font-size: var(--app-text-lg);
+  font-weight: 500;
+}
+.t-card__description,
+.t-card__subtitle {
+  font-size: var(--app-text-base);
+  color: var(--td-text-color-secondary);
+}
+
+// ---------- Popover / select / dropdown ----------
+.t-popup__content {
+  border-radius: var(--app-radius-token);
+  font-size: var(--app-text-base);
+  // TDesign varsayılanı break-all kelimeleri harf ortasından böler ("Diğ/er").
+  // Kelimeleri bütün tut; yalnızca sığmayan uzun URL/anahtar gibi dizeleri kır.
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+.t-select-option,
+.t-dropdown__item {
+  font-size: var(--app-text-base);
+  border-radius: var(--app-radius-control);
+}
+.t-dropdown__item-text {
+  font-size: var(--app-text-base);
+}
+
+// ---------- Table ----------
+.t-table {
+  font-size: var(--app-text-base);
+}
+.t-table th {
+  font-size: var(--app-text-md);
+  font-weight: 500;
+}
+
+// ---------- Form ----------
+.t-form__label,
+.t-form__label label {
+  font-size: var(--app-text-base);
+  font-weight: 500;
+}
+.t-form__help,
+.t-input__tips {
+  font-size: var(--app-text-xs);
+}
+
+// ---------- Message / tooltip ----------
+.t-message {
+  font-size: var(--app-text-md);
+  font-weight: 400;
+}
+.t-tooltip .t-popup__content {
+  font-size: var(--app-text-xs);
+  border-radius: var(--app-radius-control);
+  padding: 6px 10px;
+}
+
+
+// ---------- Settings dialog controls: SelectTrigger w-40 h-8 rounded-full, Button size=sm ----------
+.settings-modal-shell .setting-control,
+.management-panel .setting-control {
+  > .t-select__wrap,
+  > .t-select,
+  > .t-input-number,
+  > .t-input__wrap {
+    width: 160px;
+  }
+
+  .t-select .t-input,
+  .t-input-number .t-input,
+  .t-input__wrap .t-input {
+    height: 32px;
+    padding-left: 14px;
+    padding-right: 14px;
+    background-color: var(--td-bg-color-page);
+  }
+
+  .t-select .t-input__inner {
+    font-weight: 400;
+  }
+
+  .t-button {
+    height: 32px;
+    padding: 0 12px;
+    border-radius: var(--app-radius-pill);
+    font-size: var(--app-text-base);
+    font-weight: 500;
+  }
+}
+
+// =====================================================================
+// Referans (shadcn) birebir eşleme: son katman
+// =====================================================================
+
+// ---------- Popover / Select / Dropdown içerik yüzeyi ----------
+// Referans: kenarlıksız, 0 2px 8px -2px rgba(0,0,0,.16), menülerde 14px radius.
+.t-popup__content {
+  border: 0 !important;
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.16) !important;
+  background-color: var(--td-bg-color-container);
+  color: var(--td-text-color-primary);
+}
+:root[theme-mode='dark'] .t-popup__content {
+  box-shadow: var(--app-popover-shadow) !important;
+}
+.t-select__dropdown .t-popup__content,
+.t-dropdown .t-popup__content,
+.t-popup__content:has(.t-dropdown__menu),
+.t-popup__content:has(.t-select__dropdown-inner) {
+  border-radius: 14px !important;
+}
+.t-select__dropdown-inner,
+.t-dropdown__menu {
+  padding: 4px !important;
+  font-family: var(--app-font-heading);
+}
+.t-select__dropdown-inner {
+  min-width: 144px;
+}
+.t-dropdown__menu {
+  min-width: 192px;
+}
+
+// SelectItem: rounded-[11px] py-2 pr-8 pl-3 text-sm gap 10px, focus bg-accent
+.t-select-option {
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 8px 32px 8px 12px !important;
+  border-radius: 11px !important;
+  font-size: var(--app-text-base) !important;
+  line-height: 1.43;
+  color: var(--td-text-color-primary);
+  gap: 10px;
+}
+// DropdownMenuItem: rounded-[11px] px-3 py-2 text-sm gap 10px
+.t-dropdown__item {
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 8px 12px !important;
+  border-radius: 11px !important;
+  font-size: var(--app-text-base) !important;
+  line-height: 1.43;
+  color: var(--td-text-color-primary);
+  gap: 10px;
+}
+.t-select-option:hover:not(.t-is-disabled),
+.t-select-option.t-select-option__hover,
+.t-dropdown__item:hover:not(.t-is-disabled),
+.t-dropdown__item--active {
+  background-color: var(--td-bg-color-container-active) !important;
+  color: var(--td-text-color-primary) !important;
+}
+.t-select-option.t-is-selected:not(.t-is-disabled) {
+  background-color: transparent;
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+}
+.t-select-option.t-is-disabled,
+.t-dropdown__item.t-is-disabled {
+  opacity: 0.5;
+}
+.t-dropdown__item-icon,
+.t-dropdown__item .t-icon {
+  font-size: 16px;
+  color: var(--td-text-color-secondary);
+}
+.t-dropdown__item--theme-error,
+.t-dropdown__item--theme-error .t-icon {
+  color: var(--td-error-color) !important;
+}
+.t-dropdown__item--theme-error:hover:not(.t-is-disabled) {
+  background-color: color-mix(in srgb, var(--td-error-color) 10%, transparent) !important;
+}
+// DropdownMenuSeparator: bg-border/50 h-px my-1
+.t-dropdown__item--divider,
+.t-divider.t-dropdown__divider {
+  margin: 4px 0 !important;
+  border-color: color-mix(in srgb, var(--td-component-stroke) 50%, transparent) !important;
+}
+// Grup başlığı: DropdownMenuLabel text-xs muted px-3 py-2.5
+.t-select-option-group__header {
+  padding: 10px 12px !important;
+  font-size: var(--app-text-xs) !important;
+  font-weight: 500;
+  color: var(--td-text-color-secondary) !important;
+}
+
+// ---------- Select trigger: outline input, chevron muted 16px ----------
+.t-select .t-input {
+  gap: 6px;
+}
+.t-select .t-input:hover:not(.t-is-disabled):not(.t-input--focused) {
+  background-color: color-mix(in srgb, var(--td-bg-color-container-active) 50%, var(--td-bg-color-page));
+}
+.t-select__right-icon,
+.t-select .t-fake-arrow {
+  color: var(--td-text-color-secondary) !important;
+  font-size: 16px;
+}
+
+// ---------- Textarea: rounded-xl px-3.5 py-3 text-sm min-h-16 ----------
+.t-textarea__inner {
+  border-radius: var(--app-radius-token-xl) !important;
+  padding: 12px 14px !important;
+  min-height: 64px;
+  border-color: var(--td-component-stroke);
+  line-height: 1.43;
+}
+.t-textarea__inner:hover:not(.t-is-disabled):not(:focus) {
+  border-color: var(--td-component-stroke);
+}
+.t-textarea__limit,
+.t-textarea__info_wrapper {
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-secondary);
+}
+.t-input:hover:not(.t-is-disabled):not(.t-is-error):not(.t-input--focused) {
+  border-color: var(--td-component-stroke);
+}
+.t-input.t-is-disabled,
+.t-textarea__inner.t-is-disabled {
+  opacity: 0.5;
+  background-color: var(--td-bg-color-page);
+}
+.t-input.t-is-error,
+.t-textarea__inner.t-is-error {
+  border-color: var(--td-error-color) !important;
+}
+
+// The reference uses a translucent fill and no visible border for dark controls.
+:root[theme-mode='dark'] {
+  .t-input:not(.t-is-disabled),
+  .t-select .t-input:not(.t-is-disabled),
+  .t-textarea__inner:not(.t-is-disabled),
+  .settings-modal-shell .setting-control .t-input:not(.t-is-disabled),
+  .management-panel .setting-control .t-input:not(.t-is-disabled) {
+    background-color: rgba(255, 255, 255, 0.06);
+    border-color: transparent;
+  }
+
+  .t-select .t-input:hover:not(.t-is-disabled):not(.t-input--focused) {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .t-input:not(.t-is-disabled):focus-within,
+  .t-textarea__inner:not(.t-is-disabled):focus {
+    background-color: rgba(255, 255, 255, 0.12);
+    border-color: transparent !important;
+  }
+
+  .t-input.t-is-error,
+  .t-textarea__inner.t-is-error {
+    border-color: var(--td-error-color) !important;
+  }
+}
+
+// ---------- Checkbox: 16px rounded-[6px] border-input, checked bg-primary ----------
+.t-checkbox__input {
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--td-component-stroke) !important;
+  background-color: var(--td-bg-color-page);
+}
+.t-checkbox.t-is-checked .t-checkbox__input,
+.t-checkbox.t-is-indeterminate .t-checkbox__input {
+  background-color: var(--td-brand-color) !important;
+  border-color: var(--td-brand-color) !important;
+}
+.t-checkbox.t-is-checked .t-checkbox__input::after {
+  border-color: #fff !important;
+}
+.t-checkbox:hover:not(.t-is-disabled) .t-checkbox__input {
+  border-color: var(--td-component-stroke);
+}
+.t-checkbox.t-is-disabled {
+  opacity: 0.5;
+}
+.t-checkbox__label {
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+
+// ---------- Radio: 16px daire, checked bg-primary + 8px beyaz nokta ----------
+.t-radio__input {
+  width: 16px !important;
+  height: 16px !important;
+  border: 1px solid var(--td-component-stroke) !important;
+  background-color: var(--td-bg-color-page) !important;
+}
+.t-radio.t-is-checked .t-radio__input {
+  background-color: var(--td-brand-color) !important;
+  border-color: var(--td-brand-color) !important;
+}
+.t-radio .t-radio__input::after {
+  width: 8px !important;
+  height: 8px !important;
+  margin-top: -4px !important;
+  margin-left: -4px !important;
+  background-color: #fff !important;
+}
+.t-radio__label {
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+.t-radio.t-is-disabled {
+  opacity: 0.5;
+}
+
+// ---------- Switch: reference 32x18.4 / small 24x14 ----------
+.t-switch {
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  padding: 0;
+  flex-shrink: 0;
+  line-height: normal;
+  background-color: var(--td-component-stroke);
+  transition: background-color 200ms ease;
+}
+.t-switch .t-switch__handle {
+  top: 50%;
+  left: 0;
+  background-color: var(--td-bg-color-page);
+  box-shadow: none !important;
+  transform: translateY(-50%);
+  transition: transform 200ms ease;
+}
+.t-switch .t-switch__handle::before {
+  background-color: var(--td-bg-color-page);
+  transition: none;
+}
+.t-switch:active:not(.t-is-disabled):not(.t-is-loading) .t-switch__handle::before {
+  left: 0 !important;
+  right: 0 !important;
+}
+.t-switch .t-switch__content {
+  display: none;
+}
+.t-switch.t-size-m,
+.t-switch.t-size-l {
+  height: 18.4px;
+  min-width: 32px;
+  width: 32px;
+  border-radius: var(--app-radius-pill);
+}
+.t-switch.t-size-m .t-switch__handle,
+.t-switch.t-size-l .t-switch__handle {
+  width: 16px;
+  height: 16px;
+  top: 50%;
+  left: 0;
+}
+.t-switch.t-size-m.t-is-checked .t-switch__handle,
+.t-switch.t-size-l.t-is-checked .t-switch__handle {
+  width: 16px;
+  height: 16px;
+  top: 50%;
+  left: 0;
+  transform: translate(14px, -50%);
+}
+.t-switch.t-size-s {
+  height: 14px;
+  min-width: 24px;
+  width: 24px;
+  border-radius: var(--app-radius-pill);
+}
+.t-switch.t-size-s .t-switch__handle {
+  width: 12px;
+  height: 12px;
+  top: 50%;
+  left: 0;
+}
+.t-switch.t-size-s.t-is-checked .t-switch__handle {
+  width: 12px;
+  height: 12px;
+  top: 50%;
+  left: 0;
+  transform: translate(10px, -50%);
+}
+.t-switch.t-is-checked,
+.t-switch.t-is-disabled.t-is-checked,
+.t-switch.t-is-loading.t-is-checked {
+  background-color: var(--td-brand-color);
+}
+.t-switch.t-is-disabled {
+  opacity: 0.5;
+  background-color: var(--td-component-stroke);
+}
+.t-switch:hover:not(.t-is-disabled):not(.t-is-checked) {
+  background-color: var(--td-component-stroke);
+}
+.t-switch.t-is-checked:hover:not(.t-is-disabled) {
+  background-color: var(--td-brand-color);
+}
+
+// ---------- Tabs: pasif foreground/60, aktif foreground ----------
+.t-tabs__nav-item {
+  color: color-mix(in srgb, var(--td-text-color-primary) 60%, transparent);
+}
+.t-tabs__nav-item.t-is-active {
+  color: var(--td-text-color-primary);
+}
+.t-tabs__bar {
+  background-color: var(--td-text-color-primary);
+}
+
+// ---------- Dialog başlığı / açıklama ----------
+.t-dialog__header,
+.t-dialog__header-content {
+  font-family: var(--app-font-heading);
+  font-size: var(--app-text-xl) !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  color: var(--td-text-color-primary);
+}
+// TDesign varsayılanı flex-start; ikon (24px) ile tek satırlık başlığı ortala
+.t-dialog__header .t-dialog__header-content {
+  align-items: center;
+}
+.t-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+}
+.t-dialog__footer > div {
+  display: inline-flex;
+  gap: 16px;
+}
+.t-dialog__footer .t-button + .t-button {
+  margin-left: 0;
+}
+.confirm-delete-dialog {
+  border-radius: var(--app-radius-2xl);
+
+  .t-dialog__header-content {
+    align-items: center;
+  }
+
+  .t-dialog__body__icon {
+    color: var(--td-text-color-secondary);
+    line-height: 1.5;
+  }
+
+  .t-dialog__footer .t-button {
+    min-width: 88px;
+  }
+
+  .t-dialog__confirm.t-button--theme-danger {
+    background: var(--td-error-color-7);
+    color: var(--td-text-color-anti);
+
+    &:hover:not(.t-is-disabled) {
+      background: var(--td-error-color-8);
+      color: var(--td-text-color-anti);
+    }
+  }
+}
+.t-dialog--default {
+  max-width: calc(100vw - 32px);
+}
+
+// ---------- Drawer (Sheet): overlay black/30, shadow-lg ----------
+.t-drawer__content-wrapper {
+  background-color: var(--td-bg-color-container);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1) !important;
+}
+.t-drawer__header {
+  font-family: var(--app-font-heading);
+  font-size: var(--app-text-xl) !important;
+  font-weight: 500 !important;
+  color: var(--td-text-color-primary);
+  padding: 16px;
+}
+.t-drawer__body {
+  font-size: var(--app-text-base);
+  padding: 16px;
+}
+.t-drawer__footer {
+  padding: 16px;
+}
+
+// ---------- Slider: track h-2 black/10 rounded-4xl, range primary, thumb 16px ----------
+.t-slider__rail {
+  height: 8px !important;
+  border-radius: var(--app-radius-token-4xl) !important;
+  background-color: color-mix(in srgb, var(--td-text-color-primary) 10%, transparent) !important;
+}
+.t-slider__track {
+  height: 8px !important;
+  border-radius: var(--app-radius-token-4xl) !important;
+  background-color: var(--td-brand-color) !important;
+}
+.t-slider__button {
+  width: 16px !important;
+  height: 16px !important;
+  border: 0 !important;
+  background-color: #fff !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1) !important;
+}
+.t-slider__button:hover,
+.t-slider__button--dragging {
+  transform: none !important;
+}
+.t-slider__stop {
+  display: none;
+}
+.t-slider__mark-text {
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-secondary);
+}
+
+// ---------- Progress: h-3 foreground/6% rounded-4xl ----------
+.t-progress__bar {
+  height: 12px !important;
+  border-radius: var(--app-radius-token-4xl) !important;
+  background-color: color-mix(in srgb, var(--td-text-color-primary) 6%, transparent) !important;
+}
+.t-progress__inner {
+  border-radius: var(--app-radius-token-4xl) !important;
+  background: var(--td-brand-color) !important;
+}
+.t-progress__info {
+  font-size: var(--app-text-xs);
+  font-weight: 500;
+  color: var(--td-text-color-secondary);
+}
+
+// ---------- Pagination: ghost/outline pill butonlar ----------
+.t-pagination {
+  font-size: var(--app-text-base);
+  color: var(--td-text-color-secondary);
+}
+.t-pagination__number,
+.t-pagination__btn {
+  min-width: 32px;
+  height: 32px;
+  border: 0 !important;
+  border-radius: var(--app-radius-pill) !important;
+  font-size: var(--app-text-base);
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+  background: transparent;
+}
+.t-pagination__number:hover:not(.t-is-current),
+.t-pagination__btn:hover:not(.t-is-disabled) {
+  background-color: var(--td-bg-color-secondarycontainer) !important;
+  color: var(--td-text-color-primary) !important;
+}
+.t-pagination__number.t-is-current {
+  background-color: var(--td-bg-color-page) !important;
+  color: var(--td-text-color-primary) !important;
+  box-shadow: 0 0 0 1px var(--td-component-stroke);
+}
+
+// ---------- Loading ----------
+.t-loading {
+  color: var(--td-text-color-secondary);
+}
+.t-loading__text {
+  font-size: var(--app-text-base);
+  color: var(--td-text-color-secondary);
+}
+.t-loading__gradient-conic {
+  background: conic-gradient(from 90deg at 50% 50%, transparent 0deg, currentColor 360deg) !important;
+}
+
+// ---------- Upload dragger ----------
+.t-upload__dragger {
+  border-radius: var(--app-radius-token-xl) !important;
+  border: 1px dashed var(--td-component-stroke) !important;
+  background-color: var(--td-bg-color-page) !important;
+}
+.t-upload__dragger:hover,
+.t-upload__dragger.t-upload__dragger-progress {
+  border-color: var(--td-brand-color) !important;
+  background-color: color-mix(in srgb, var(--td-brand-color) 4%, var(--td-bg-color-page)) !important;
+}
+
+// ---------- Collapse / empty / divider ----------
+.t-divider {
+  border-color: var(--td-component-stroke);
+}
+.t-collapse {
+  border-color: var(--td-component-stroke);
+  border-radius: var(--app-radius-token-xl);
+}
+.t-collapse-panel__header {
+  font-size: var(--app-text-base);
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+
+// ---------- Tooltip compact: rounded-[11px] bg-black px-2.5 py-1.5 text-ui-11 medium ----------
+.t-tooltip .t-popup__content {
+  background-color: #000 !important;
+  color: #fff !important;
+  border: 0 !important;
+  border-radius: 11px !important;
+  padding: 6px 10px !important;
+  font-size: 10.3125px !important;
+  font-weight: 500 !important;
+  line-height: 1.375;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1) !important;
+}
+.t-tooltip {
+  pointer-events: none;
+}
+
+// ---------- Table: header bg-muted/80, satır hover muted/50, head h-12 px-3, cell p-3 ----------
+.t-table th,
+.t-table thead td {
+  height: 48px;
+  padding: 0 12px !important;
+  font-size: var(--app-text-base) !important;
+  font-weight: 500 !important;
+  color: var(--td-text-color-primary) !important;
+  background-color: color-mix(in srgb, var(--td-bg-color-secondarycontainer) 80%, transparent) !important;
+}
+.t-table td {
+  padding: 12px !important;
+  font-size: var(--app-text-base);
+  border-bottom-color: var(--td-component-stroke) !important;
+}
+.t-table--hoverable tbody tr:hover,
+.t-table tbody tr:hover {
+  background-color: color-mix(in srgb, var(--td-bg-color-secondarycontainer) 50%, transparent) !important;
+}
+
+// ---------- Form ----------
+.t-form__label,
+.t-form__label label {
+  line-height: 1;
+  color: var(--td-text-color-primary);
+}
+.t-form__help,
+.t-input__tips {
+  font-size: var(--app-text-base);
+  color: var(--td-text-color-secondary);
+}
+.t-input__tips.t-tips.t-is-error,
+.t-form__controls .t-input__extra {
+  color: var(--td-error-color);
+}

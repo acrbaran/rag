@@ -1,0 +1,330 @@
+/*
+ * Rethra chat skin — mirrors the rag-platform chat design
+ * (DESIGN.md: flat tonal surfaces, Inter, pill controls, #17b88b primary).
+ * Selectors are prefixed with `body` so they outrank the scoped component styles.
+ */
+
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@/assets/fonts/inter-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@/assets/fonts/inter-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --rethra-primary: #17b88b;
+  --rethra-primary-hover: #129f78;
+  --rethra-bg: #fefefd;
+  --rethra-surface: #ffffff;
+  --rethra-fg: oklch(0.2686 0 0);
+  --rethra-muted-fg: oklch(0.5486 0 0);
+  --rethra-user-bubble: #f5f5f5;
+  --rethra-user-fg: #0d0d0d;
+  --rethra-hover: #ececec;
+  --rethra-border: oklch(0.9208 0.0101 164.8536);
+  --rethra-composer-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.16);
+  --rethra-column: 736px;
+  --rethra-font: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'PingFang SC', sans-serif;
+}
+
+:root[theme-mode='dark'] {
+  --rethra-bg: var(--td-bg-color-page);
+  --rethra-surface: var(--td-bg-color-container);
+  --rethra-fg: var(--td-text-color-primary);
+  --rethra-muted-fg: var(--td-text-color-secondary);
+  --rethra-user-bubble: #2a2a2a;
+  --rethra-user-fg: var(--td-text-color-primary);
+  --rethra-hover: var(--td-bg-color-container-active);
+  --rethra-border: var(--td-component-stroke);
+  --rethra-composer-shadow: var(--app-composer-shadow);
+}
+
+/* ---------- Page surface ---------- */
+body .chat:not(.is-embedded),
+body .dialogue-wrap {
+  background: var(--rethra-bg);
+  font-family: var(--rethra-font);
+  color: var(--rethra-fg);
+  letter-spacing: 0.01em;
+}
+
+body .chat:not(.is-embedded) .chat-topbar {
+  background: var(--rethra-bg);
+  border-bottom-color: transparent;
+}
+
+body .chat:not(.is-embedded) .chat_composer {
+  background: linear-gradient(to bottom, transparent, var(--rethra-bg) 18px);
+  padding-top: 8px;
+}
+
+/* ---------- Centered reading column ---------- */
+body .chat:not(.is-embedded) .msg_list,
+body .chat:not(.is-embedded) .input-container {
+  max-width: calc(var(--rethra-column) + 2 * var(--chat-content-inset, 20px));
+}
+
+body .chat:not(.is-embedded) .msg-skeleton-list {
+  max-width: var(--rethra-column);
+}
+
+body .chat:not(.is-embedded) .msg_list {
+  gap: 8px;
+}
+
+body .dialogue-wrap .dialogue-answers {
+  max-width: calc(var(--rethra-column) + 32px);
+  padding: 0 16px;
+  box-sizing: border-box;
+  gap: 36px;
+}
+
+@media (max-width: 900px) {
+  body .dialogue-wrap .dialogue-answers .answers-input {
+    width: calc(100% - 62px);
+    margin-inline: auto;
+  }
+
+  body .dialogue-wrap .rich-input-container .control-left {
+    gap: 4px;
+  }
+
+  body .dialogue-wrap .rich-input-container .model-selector-ctx {
+    display: none;
+  }
+
+  body .dialogue-wrap .rich-input-container .agent-mode-btn {
+    width: 32px;
+    min-width: 32px;
+    justify-content: center;
+    padding: 0;
+
+    &::before {
+      content: '+';
+      font-size: 24px;
+      font-weight: 300;
+      line-height: 1;
+    }
+
+    .agent-mode-text,
+    .dropdown-arrow {
+      display: none;
+    }
+  }
+
+  body .dialogue-wrap .rich-input-container .reasoning-effort-trigger {
+    padding-inline: 4px;
+  }
+}
+
+/* Reference welcome sits at a fixed offset from the top of the viewport. */
+body .dialogue-wrap.dialogue-wrap {
+  align-items: flex-start;
+  padding-top: calc(48px + 27.5dvh);
+  box-sizing: border-box;
+}
+
+body .dialogue-wrap .dialogue-title {
+  justify-content: center;
+  gap: 15px;
+  font-family: var(--app-font-heading);
+  font-size: var(--app-text-welcome);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--rethra-fg);
+
+  .dialogue-title__icon {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    object-fit: contain;
+    transform: translateY(-2px);
+  }
+}
+
+body .dialogue-wrap .suggested-questions-container:empty {
+  display: none;
+}
+
+/* ---------- User message bubble ---------- */
+body .chat .user_msg {
+  max-width: 80%;
+  padding: 10px 16px;
+  border-radius: var(--app-radius-2xl);
+  background: var(--rethra-user-bubble);
+  color: var(--rethra-user-fg);
+  font-family: var(--rethra-font);
+  font-size: var(--app-text-chat);
+  font-weight: 410;
+  letter-spacing: 0.01em;
+}
+
+body .chat .user_msg_container {
+  padding-top: 24px;
+  padding-bottom: 8px;
+}
+
+/* ---------- Assistant message ---------- */
+body .chat .bot_msg {
+  font-family: var(--rethra-font);
+  color: var(--rethra-fg);
+  font-size: var(--app-text-chat);
+  line-height: 1.7;
+}
+
+/* ---------- Composer ---------- */
+body .chat .answers-input .rich-input-container,
+body .dialogue-wrap .answers-input .rich-input-container {
+  max-width: var(--rethra-column);
+  border: 0;
+  border-radius: var(--app-radius-composer);
+  background: var(--rethra-surface);
+  box-shadow: var(--rethra-composer-shadow);
+  padding: 12px;
+  box-sizing: border-box;
+  font-family: var(--rethra-font);
+
+  &:focus-within {
+    border: 0;
+    box-shadow: var(--rethra-composer-shadow);
+  }
+
+  .t-textarea__inner {
+    font-family: var(--rethra-font);
+    font-size: var(--app-text-composer);
+    font-weight: 450;
+    line-height: 1.6;
+    min-height: 40px !important;
+    padding: 8px !important;
+    border-radius: 0;
+    color: var(--rethra-fg);
+
+    &::placeholder {
+      font-family: var(--rethra-font);
+      font-size: var(--app-text-composer);
+      color: var(--rethra-muted-fg);
+    }
+  }
+
+  .selected-tags-inline {
+    border-bottom: 0;
+    background: transparent;
+    border-radius: var(--app-radius-sheet) var(--app-radius-sheet) 0 0;
+    padding: 8px 14px 0;
+  }
+
+  .control-bar {
+    margin: 12px 0 0;
+    padding: 0;
+  }
+
+  .control-left {
+    gap: 4px;
+  }
+
+  /* Pill-shaped secondary controls */
+  .control-btn:not(.send-btn):not(.stop-btn) {
+    border-radius: var(--app-radius-pill);
+  }
+
+  .control-btn:not(.send-btn):not(.stop-btn):hover {
+    background: var(--rethra-hover);
+  }
+
+  /* Reference: 36px round icon buttons */
+  .control-bar .attachment-upload-btn,
+  .control-bar .kb-btn,
+  .control-bar .image-upload-btn,
+  .control-bar .websearch-btn,
+  .control-bar .browser-source-btn {
+    width: 36px;
+    height: 36px;
+    background: transparent;
+
+    .control-icon {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  /* Reference: .composer-pill-btn */
+  .control-bar .agent-mode-btn {
+    box-sizing: border-box;
+    height: 32px;
+    padding: 6px 10px 6px 8px;
+    gap: 6px;
+    border: 0;
+    border-radius: var(--app-radius-pill);
+  }
+
+  .control-bar .agent-mode-text {
+    font-size: var(--app-text-base);
+    font-weight: 500;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  /* Reference: model picker trigger */
+  .control-bar .model-selector-trigger {
+    box-sizing: border-box;
+    height: 32px;
+    padding: 0 6px 0 10px;
+    gap: 4px;
+    border-radius: var(--app-radius-pill);
+    background: transparent;
+    border-color: transparent;
+  }
+
+  .control-bar .model-selector-name {
+    font-size: var(--app-text-xs);
+    font-weight: 400;
+  }
+}
+
+body .answers-input .steer-queue {
+  max-width: calc(var(--rethra-column) - 48px);
+  border-radius: var(--app-radius-xl) var(--app-radius-xl) 0 0;
+}
+
+/* Round primary send / stop */
+body .answers-input .send-btn,
+body .answers-input .stop-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--rethra-primary);
+
+  &:hover:not(.disabled) {
+    background-color: var(--rethra-primary-hover);
+  }
+
+  &.disabled {
+    background-color: var(--rethra-primary);
+    opacity: 0.35;
+  }
+
+  img {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+body .chat .scroll-to-bottom-btn {
+  width: 36px;
+  height: 36px;
+  background: var(--rethra-surface);
+  border-color: var(--rethra-border);
+  box-shadow: var(--rethra-composer-shadow);
+}
